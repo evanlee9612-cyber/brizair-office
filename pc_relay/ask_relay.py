@@ -419,10 +419,11 @@ def main():
                     remember(q, a, missing, time.time() - t0)
                     log(f'answered {q["id"]} in {time.time() - t0:.0f}s' + (' (missing info)' if missing else ''))
                 except UsageLimit as e:
-                    when = str(e) or 'later'
-                    log(f'ChatGPT usage limit reached — paused until {when}')
+                    when = str(e)
+                    log(f'ChatGPT usage limit reached — paused (resets {when or "later"})')
+                    again = f'after {when}' if when else 'later'
                     post({'a': 'relayAnswer', 'key': key, 'id': q['id'], 'error': True,
-                          'answer': f'GPT LIMIT: GPT reached its ChatGPT usage limit. Please ask again after {when}.'})
+                          'answer': f'GPT LIMIT: GPT reached its ChatGPT usage limit. Please ask again {again}.'})
                     pause_until = time.time() + 30 * 60
                     break
                 except Exception as e:  # noqa
