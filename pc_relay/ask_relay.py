@@ -335,7 +335,7 @@ def answer(codex, q, now):
         if not ans:
             tail = ' | '.join((r.stderr or r.stdout or '').strip().splitlines()[-3:])[:300]
             if re.search(r'usage limit|rate limit|quota', tail, re.I):
-                m = re.search(r'try again at ([^|.]+?\d{1,2}:\d{2}\s*[AP]M)', tail)
+                m = re.search(r'try again at ([^|.]*?\d{1,2}:\d{2}\s*[AP]M)', tail)
                 raise UsageLimit(m.group(1).strip() if m else '')
             raise RuntimeError(f'codex gave no answer (code {r.returncode}): {tail}')
         missing = '; '.join(m.strip() for m in MISSING_RE.findall(ans))
