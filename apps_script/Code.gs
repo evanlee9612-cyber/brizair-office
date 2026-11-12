@@ -167,7 +167,29 @@ function sh_(name) {
 }
 function norm_(h) { return String(h).replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase(); }
 
+var _fast = false, _pre = null;
+/** read many tabs in ONE request (Sheets API) — much faster than one by one. Falls back to the normal way on any problem. */
+function prefetch_(names) {
+  _pre = null; _fast = false;
+  try {
+    if (typeof Sheets === 'undefined') return;
+    var res = Sheets.Spreadsheets.Values.batchGet(SHEET_ID, {ranges: names.map(function (n) { return "'" + n.replace(/'/g, "''") + "'"; }),
+      valueRenderOption: 'UNFORMATTED_VALUE', dateTimeRenderOption: 'SERIAL_NUMBER'});
+    var pre = {};
+    (res.valueRanges || []).forEach(function (vr, i) {
+      var rows = vr.values || [[]], w = 0;
+      rows.forEach(function (r) { if (r.length > w) w = r.length; });
+      pre[names[i]] = rows.map(function (r) { while (r.length < w) r.push(''); return r; });
+    });
+    _pre = pre; _fast = true;
+  } catch (x) { _pre = null; _fast = false; }
+}
 function table_(name, keyCol) {
+  if (_pre && _pre[name]) {
+    var pv = _pre[name], ph = (pv[0] || []).map(norm_), pidx = {};
+    ph.forEach(function (h, i) { if (h && pidx[h] === undefined) pidx[h] = i; });
+    return {sh: null, vals: pv, head: ph, idx: pidx, lc: (pv[0] || []).length};
+  }
   var sh = sh_(name);
   var vals = sh.getDataRange().getValues();
   var lc = vals[0] ? vals[0].length : 0;
@@ -183,7 +205,13 @@ function col_(T, name) {
 }
 function colOpt_(T, name) { var i = T.idx[name.toLowerCase()]; return i === undefined ? -1 : i; }
 
+function serialToIso_(n) {  // Google Sheets day number → yyyy-mm-dd (no time zone shift)
+  var ms = Math.round((n - 25569) * 86400000), d = new Date(ms);
+  var y = d.getUTCFullYear(), m = d.getUTCMonth() + 1, dd = d.getUTCDate();
+  return y + '-' + (m < 10 ? '0' : '') + m + '-' + (dd < 10 ? '0' : '') + dd;
+}
 function d_(v) {
+  if (typeof v === 'number' && v > 20000 && v < 2958466 && _fast) return serialToIso_(v);  // 1954..9999
   if (v instanceof Date && !isNaN(v)) {  // script time zone = Asia/Manila, so local getters are Manila dates (fast)
     var y = v.getFullYear(), m = v.getMonth() + 1, d = v.getDate();
     return y + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d;
@@ -268,7 +296,13 @@ function boot_(req, me, parts) {
   (parts || SECTIONS).forEach(function (k) { want[k] = true; });
   var out = {ok: true, me: {name: me.name, role: me.role}, at: new Date().toISOString(), v: VERSION, sections: parts || SECTIONS,
     sheetUrl: 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit', jobs: JOBS, statuses: STATUSES, methods: METHODS};
-  var T, i;
+  var T, i, names = [];
+  if (want.stock) names.push('UNITS', 'PARTS', 'UNIT IN-OUT', 'PART IN-OUT');
+  if (want.schedule) names.push('SCHEDULE');
+  if (want.money) names.push('RECEIVABLES', 'PAYMENTS');
+  if (want.customers) names.push('CUSTOMERS');
+  if (req && req.slow) { _pre = null; _fast = false; } else prefetch_(names);
+  out.fast = _fast;
   if (want.stock) {
     T = table_('UNITS');
     out.units = rows_(T, function (r, i) {
@@ -377,6 +411,7 @@ function boot_(req, me, parts) {
         .map(function (r) { return {time: r[0], who: r[1], action: r[2], details: r[3]}; });
     }
   }
+  _pre = null; _fast = false;
   tm.total = Date.now() - t0;
   out.ms = tm;
   return out;
@@ -389,6 +424,10 @@ function rows_(T, fn) {
 }
 
 function timeStr_(v) {
+  if (_fast && typeof v === 'number' && v >= 0 && v < 1) {
+    var mins = Math.round(v * 1440), h = Math.floor(mins / 60) % 24, mi = mins % 60;
+    return (h % 12 || 12) + ':' + (mi < 10 ? '0' : '') + mi + ' ' + (h < 12 ? 'AM' : 'PM');
+  }
   if (v instanceof Date) return Utilities.formatDate(v, TZ, 'h:mm a');
   return s_(v);
 }
