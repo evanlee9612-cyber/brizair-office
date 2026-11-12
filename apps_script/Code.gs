@@ -20,6 +20,7 @@ var JOBS = ['Install', 'Service (AS)', 'Cleaning', 'Survey', 'Delivery', 'Pull-o
 var STATUSES = ['Scheduled', 'Confirmed', 'Done', 'Moved', 'Cancelled'];
 var METHODS = ['Cash', 'Bank', 'GCash', 'Check', 'Other'];
 var MAIN_FOLDER_ID = '1mzJaWt2sPB2yck9vy4AtkVk0A8NKGzJH';  // BRIZAIR Office (Bot + Sheets)
+var ARCHIVE_FOLDER_ID = '1tuE7gj_2PPsjovROzIKJ25zw9J4aa3w3';  // BRIZAIR Original Excel (2026-11-12), read only
 
 // ───────────────────────── entry points ─────────────────────────
 function doGet() {
@@ -58,6 +59,7 @@ var ACTIONS = {
   quoteStatus: quoteStatus_,
   ask: ask_,
   askGet: askGet_,
+  askRate: askRate_,
   kNote: kNote_,
   kUpload: kUpload_,
   kHide: kHide_
@@ -309,17 +311,20 @@ function boot_(req, me) {
     return o;
   });
 
-  var qs = ss_().getSheetByName('QUOTES');
   out.quotes = [];
-  if (qs && qs.getLastRow() > 1) {
+  ['QUOTES', 'INVOICES'].forEach(function (tab) {
+    var qs = ss_().getSheetByName(tab);
+    if (!qs || qs.getLastRow() < 2) return;
     qs.getRange(2, 1, qs.getLastRow() - 1, 9).getValues().forEach(function (r, i) {
       if (!r[0]) return;
       var data = {}; try { data = JSON.parse(r[8] || '{}'); } catch (x) {}
-      out.quotes.push({r: i + 2, no: s_(r[0]), date: d_(r[1]), customer: s_(r[2]), project: s_(r[3]), total: n_(r[4]) || 0,
-        status: s_(r[5]), by: s_(r[6]), updated: s_(r[7]), data: data});
+      out.quotes.push({r: i + 2, no: s_(r[0]), type: tab === 'INVOICES' ? 'invoice' : 'quote', date: d_(r[1]), customer: s_(r[2]), project: s_(r[3]),
+        total: n_(r[4]) || 0, status: s_(r[5]), by: s_(r[6]), updated: s_(r[7]), data: data});
     });
-  }
+  });
   out.ask = askRows_(40);
+  out.needs = askRows_(400).filter(function (r) { return r.missing || /^bad/.test(r.rating) || r.status === 'error'; }).slice(-40).reverse()
+    .map(function (r) { return {id: r.id, time: r.time, who: r.who, q: r.q, missing: r.missing, rating: r.rating}; });
   out.know = knowRows_(false).map(function (k) { k.text = String(k.text || '').slice(0, 280); return k; });
   var seen = +(PropertiesService.getScriptProperties().getProperty('RELAY_SEEN') || 0);
   out.aiOnline = seen > 0 && Date.now() - seen < 3 * 60000;
@@ -516,11 +521,12 @@ function addInstall_(req, me) {
   });
 }
 
-function quotesSheet_() {
-  var ss = ss_(), sh = ss.getSheetByName('QUOTES');
+function quotesSheet_(type) {
+  var inv = type === 'invoice', name = inv ? 'INVOICES' : 'QUOTES';
+  var ss = ss_(), sh = ss.getSheetByName(name);
   if (!sh) {
-    sh = ss.insertSheet('QUOTES');
-    sh.getRange(1, 1, 1, 9).setValues([['Quote # (견적번호)', 'Date (날짜)', 'Customer (손님)', 'Project / Location (현장)', 'Total PHP (합계)',
+    sh = ss.insertSheet(name);
+    sh.getRange(1, 1, 1, 9).setValues([[inv ? 'Invoice # (인보이스 번호)' : 'Quote # (견적번호)', 'Date (날짜)', 'Customer (손님)', 'Project / Location (현장)', 'Total PHP (합계)',
       'Status (상태)', 'Prepared by (작성)', 'Updated (수정)', 'Data - do not edit (웹 자료, 손대지 않기)']]).setFontWeight('bold');
     sh.setFrozenRows(1);
     sh.setColumnWidth(1, 120); sh.setColumnWidth(3, 220); sh.setColumnWidth(4, 200); sh.setColumnWidth(9, 120);
@@ -533,8 +539,9 @@ function saveQuote_(req, me) {
   var q = req.quote || {};
   if (!q.customer) throw new Error('Customer name is needed');
   if (!(q.items || []).length) throw new Error('Add at least one item');
+  var inv = q.type === 'invoice', pre = inv ? 'INV' : 'Q';
   return withLock_(function () {
-    var sh = quotesSheet_(), last = sh.getLastRow();
+    var sh = quotesSheet_(q.type), last = sh.getLastRow();
     var nos = last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
     var row, no = q.no;
     if (no) {
@@ -543,8 +550,8 @@ function saveQuote_(req, me) {
       row = k + 2;
     } else {
       var yy = Utilities.formatDate(new Date(), TZ, 'yyyy'), max = 0;
-      nos.forEach(function (n) { var m = n.match(new RegExp('^Q-' + yy + '-(\\d+)$')); if (m) max = Math.max(max, +m[1]); });
-      no = 'Q-' + yy + '-' + ('000' + (max + 1)).slice(-4);
+      nos.forEach(function (n) { var m = n.match(new RegExp('^' + pre + '-' + yy + '-(\\d+)$')); if (m) max = Math.max(max, +m[1]); });
+      no = pre + '-' + yy + '-' + ('000' + (max + 1)).slice(-4);
       row = last + 1;
     }
     q.no = no;
@@ -552,28 +559,29 @@ function saveQuote_(req, me) {
     if (data.length > 45000) throw new Error('Quote is too long');
     var prev = row <= last ? String(sh.getRange(row, 6).getValue()) : '';
     sh.getRange(row, 1, 1, 9).setValues([[no, toDate_(q.date || today_()), clip_(q.customer, 120), clip_(q.project, 160), +q.total || 0,
-      q.status || prev || 'Draft', q.by || me.name, Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm') + ' ' + me.name, data]]);
-    done_(me, row > last ? 'New quotation' : 'Quotation edited', no + ' · ' + q.customer + ' · ₱' + (+q.total || 0).toLocaleString('en-US', {minimumFractionDigits: 2}), '📄');
+      q.status || prev || (inv ? 'Unpaid' : 'Draft'), q.by || me.name, Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm') + ' ' + me.name, data]]);
+    done_(me, (inv ? (row > last ? 'New invoice' : 'Invoice edited') : (row > last ? 'New quotation' : 'Quotation edited')), no + ' · ' + q.customer + ' · ₱' + (+q.total || 0).toLocaleString('en-US', {minimumFractionDigits: 2}), '📄');
     return {ok: true, no: no, r: row};
   });
 }
 
 function quoteStatus_(req, me) {
-  var ok = ['Draft', 'Sent', 'Accepted', 'Lost'];
+  var inv = /^INV-/.test(String(req.no));
+  var ok = inv ? ['Unpaid', 'Partially paid', 'Paid', 'Cancelled'] : ['Draft', 'Sent', 'Accepted', 'Lost'];
   if (ok.indexOf(req.status) < 0) throw new Error('Bad status');
   return withLock_(function () {
-    var sh = quotesSheet_(), last = sh.getLastRow();
+    var sh = quotesSheet_(inv ? 'invoice' : 'quote'), last = sh.getLastRow();
     var nos = last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
     var k = nos.indexOf(req.no);
     if (k < 0) throw new Error('Quote not found');
     sh.getRange(k + 2, 6).setValue(req.status);
-    done_(me, 'Quotation ' + req.status, req.no + ' · ' + sh.getRange(k + 2, 3).getValue(), req.status === 'Accepted' ? '🎉' : '📄');
+    done_(me, (inv ? 'Invoice ' : 'Quotation ') + req.status, req.no + ' · ' + sh.getRange(k + 2, 3).getValue(), req.status === 'Accepted' ? '🎉' : '📄');
     return {ok: true};
   });
 }
 
 // ───────────────────────── AI questions (answered by Sir Kim's PC) ─────────────────────────
-var ASK_HEAD = ['ID', 'Time (시간)', 'Who (누가)', 'Question (질문)', 'Status (상태)', 'Answer (답)', 'Answered (답한 시간)'];
+var ASK_HEAD = ['ID', 'Time (시간)', 'Who (누가)', 'Question (질문)', 'Status (상태)', 'Answer (답)', 'Answered (답한 시간)', 'Rating (평가)', 'Missing info (부족한 자료)'];
 function askSheet_() {
   var ss = ss_(), sh = ss.getSheetByName('ASK');
   if (!sh) {
@@ -581,17 +589,18 @@ function askSheet_() {
     sh.getRange(1, 1, 1, ASK_HEAD.length).setValues([ASK_HEAD]).setFontWeight('bold');
     sh.setFrozenRows(1); sh.setColumnWidth(4, 360); sh.setColumnWidth(6, 520);
   }
+  if (sh.getLastColumn() < ASK_HEAD.length) sh.getRange(1, 1, 1, ASK_HEAD.length).setValues([ASK_HEAD]).setFontWeight('bold');
   return sh;
 }
 function askRows_(n, ids) {
   var sh = askSheet_(), last = sh.getLastRow();
   if (last < 2) return [];
   var from = ids ? 2 : Math.max(2, last - n + 1);
-  return sh.getRange(from, 1, last - from + 1, 7).getValues()
+  return sh.getRange(from, 1, last - from + 1, 9).getValues()
     .filter(function (r) { return r[0] && (!ids || ids.indexOf(String(r[0])) >= 0); })
     .map(function (r) {
       return {id: String(r[0]), time: r[1] instanceof Date ? Utilities.formatDate(r[1], TZ, 'yyyy-MM-dd HH:mm') : s_(r[1]),
-        who: s_(r[2]), q: s_(r[3]), status: s_(r[4]), a: s_(r[5])};
+        who: s_(r[2]), q: s_(r[3]), status: s_(r[4]), a: s_(r[5]), rating: s_(r[7]), missing: s_(r[8])};
     });
 }
 function ask_(req, me) {
@@ -601,6 +610,18 @@ function ask_(req, me) {
     var sh = askSheet_(), id = 'A' + Utilities.formatDate(new Date(), TZ, 'yyMMddHHmmss') + Math.floor(Math.random() * 90 + 10);
     sh.appendRow([id, new Date(), me.name, clip_(q, 2000), 'waiting', '', '']);
     return {ok: true, id: id};
+  });
+}
+function askRate_(req, me) {
+  return withLock_(function () {
+    var sh = askSheet_(), last = sh.getLastRow();
+    var ids = last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
+    var k = ids.indexOf(String(req.id));
+    if (k < 0) throw new Error('Not found');
+    var v = req.good ? 'good' : 'bad: ' + clip_(req.why || '', 200) + ' (' + me.name + ')';
+    sh.getRange(k + 2, 8).setValue(v);
+    if (!req.good) log_(me.name, 'GPT answer marked wrong', sh.getRange(k + 2, 4).getValue() + (req.why ? ' — ' + req.why : ''));
+    return {ok: true};
   });
 }
 function askGet_(req, me) {
@@ -732,8 +753,25 @@ function relay_(req) {
       var k = ids.indexOf(String(req.id));
       if (k < 0) return {ok: false, error: 'not found'};
       sh.getRange(k + 2, 5, 1, 3).setValues([[req.error ? 'error' : 'answered', String(req.answer || '').slice(0, 20000), new Date()]]);
+      if (req.missing) sh.getRange(k + 2, 9).setValue(String(req.missing).slice(0, 500));
       return {ok: true};
     });
+  }
+  if (req.a === 'relayArchive') {  // old Excel files (archive folder), once a day
+    var files = {};
+    var it = DriveApp.getFolderById(ARCHIVE_FOLDER_ID).getFilesByType(MimeType.GOOGLE_SHEETS);
+    while (it.hasNext()) {
+      var f = it.next(), book = {};
+      SpreadsheetApp.openById(f.getId()).getSheets().forEach(function (sh) {
+        var v = sh.getDataRange().getDisplayValues(), last = v.length;
+        while (last > 0 && v[last - 1].join('') === '') last--;
+        book[sh.getName()] = v.slice(0, last).map(function (r) {
+          var e = r.length; while (e > 0 && r[e - 1] === '') e--; return r.slice(0, e);
+        });
+      });
+      files[f.getName()] = book;
+    }
+    return {ok: true, files: files};
   }
   if (req.a === 'relayExport') {
     var ss = ss_(), tabs = {};

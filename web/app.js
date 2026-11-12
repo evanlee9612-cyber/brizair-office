@@ -48,6 +48,8 @@
     send: '<path d="M4 12 20 4l-6 16-3-7z"/>',
     refresh: '<path d="M20 11a8 8 0 0 0-14.9-3.9L3 9M4 13a8 8 0 0 0 14.9 3.9L21 15"/><path d="M3 4v5h5M21 20v-5h-5"/>'
   };
+  const lang = () => (window.BRZ_I18N ? window.BRZ_I18N.lang : 'en');
+  const tr = t => (window.BRZ_I18N ? window.BRZ_I18N.tr(t) : t);
   const ic = (n, w) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w || 2}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
 
   // ───────── utils ─────────
@@ -153,7 +155,9 @@
         const r = DEMO ? await window.BRZ_DEMO.call('login', {pin}, S) : await (await fetch(API, {method: 'POST', body: JSON.stringify({a: 'login', pin, device: navigator.userAgent})})).json();
         if (!r.ok) throw new Error(r.msg || 'Wrong PIN');
         S.t = r.t; S.me = r.me; LS.set(KEY + 't', r.t); LS.set(KEY + 'me', r.me);
+        if (window.BRZ_I18N) window.BRZ_I18N.defaultFor(r.me.role);
         start();
+        if (!LS.get('brz_seen_help', false)) setTimeout(() => ACT.help(), 600);
       } catch (e) { pin = ''; dots(); $('#perr').textContent = e.message || 'Wrong PIN'; }
     };
     $('.pad').addEventListener('click', e => {
@@ -173,7 +177,7 @@
   // ───────── shell ─────────
   const NAV = [
     ['home', 'Home', 'home'], ['ask', 'Ask GPT', 'chat'], ['schedule', 'Schedule', 'cal'], ['stock', 'Stock', 'box'], ['customers', 'Customers', 'users'],
-    ['money', 'Money', 'peso'], ['materials', 'Materials for AI', 'book'], ['quotes', 'Quotes & Forms', 'doc'], ['report', 'LG Monthly Report', 'chart'], ['activity', 'Activity', 'log']
+    ['money', 'Money', 'peso'], ['materials', 'Materials for AI', 'book'], ['quotes', 'Quotes & Invoices', 'doc'], ['report', 'LG Monthly Report', 'chart'], ['activity', 'Activity', 'log']
   ];
   function shell() {
     document.body.innerHTML = `
@@ -182,6 +186,8 @@
         <div class="logo"><span class="logo-mark">${logoSvg()}</span>BRIZAIR <small>Office</small></div>
         <div class="grow"></div>
         <button class="sync" id="sync" data-act="refresh"><i class="dot"></i><span>Up to date</span></button>
+        <button class="iconbtn" data-act="lang" aria-label="Language" title="Language"><b class="noi18n" style="font-size:13px">${lang() === 'ko' ? 'EN' : '한'}</b></button>
+        <button class="iconbtn" data-act="help" aria-label="Help" title="Help">${ic('help')}</button>
         <button class="me" data-go="more"><span class="avatar">${esc(initials(S.me && S.me.name))}</span><span class="clip" style="max-width:90px">${esc(S.me ? S.me.name : '')}</span></button>
       </header>
       <div class="shell">
@@ -273,7 +279,7 @@
     const unpaid = (D().receivables || []).filter(r => r.bal > 0);
     const arTotal = D().arTotal != null ? D().arTotal : unpaid.reduce((s, r) => s + r.bal, 0);
     const units = (D().units || []).reduce((s, u) => s + Math.max(0, u.now), 0);
-    const name = S.me ? S.me.name.split(' ')[0] : '';
+    const name = S.me ? (/^sir\b/i.test(S.me.name) ? S.me.name : S.me.name.split(' ')[0]) : '';
     return `
       <h1>${greet()}, ${esc(name)}</h1>
       <p class="sub">${esc(fmtLong(t))}</p>
@@ -373,8 +379,8 @@
       <div class="search">${ic('search')}<input id="qstock" placeholder="Search ${kind === 'part' ? 'part, part no., model' : 'model, type, hp'}…" value="${esc(S.q.stock || '')}" autocomplete="off"></div>
       <div class="chips" style="margin-bottom:12px">
         ${[['all', 'All ' + all.length], ['in', 'In stock'], ['zero', 'Zero stock']].map(c => `<button class="chip ${S.stockFilter === c[0] ? 'on' : ''}" data-act="stockFilter" data-f="${c[0]}">${c[1]}</button>`).join('')}
-        <span class="muted small" style="align-self:center;margin-left:auto;white-space:nowrap">Total on hand: <b>${total}</b></span>
       </div>
+      <p class="muted small" style="margin:-4px 0 10px">Total on hand: <b>${total}</b></p>
       <div id="stockList">${stockGroupsHtml(groups, kind)}</div>`;
   };
   function stockGroupsHtml(groups, kind) {
@@ -491,15 +497,17 @@
   };
 
   // quotes & forms
-  VIEWS.quotes = () => {
-    const qs = (D().quotes || []).slice().sort((a, b) => b.no.localeCompare(a.no));
-    return `
-      <div class="row between wrap" style="margin-bottom:12px"><h1 style="margin:0">Quotes & Forms</h1>
-        <button class="btn primary sm" data-go="quote/new">${ic('plus')} New quotation</button></div>
-      <div class="card"><div class="card-h"><h2>Quotations</h2><span class="muted small">${qs.length}</span></div><div class="list">
-        ${qs.map(q => `<button class="item" data-go="quote/${esc(q.no)}"><span class="grow"><div class="t clip">${esc(q.no)} · ${esc(q.customer)}</div>
+  const docRow = q => `<button class="item" data-go="quote/${esc(q.no)}"><span class="grow"><div class="t clip">${esc(q.no)} · ${esc(q.customer)}</div>
           <div class="s clip">${esc([fmtD(q.date, {year: 'numeric'}), q.project, q.by].filter(Boolean).join(' · '))}</div></span>
-          <span class="r"><div class="num" style="font-weight:800">${peso(q.total)}</div><span class="pill p-${esc(q.status)}">${esc(q.status)}</span></span></button>`).join('') || '<div class="empty">No quotations yet</div>'}</div></div>
+          <span class="r"><div class="num" style="font-weight:800">${peso(q.total)}</div><span class="pill p-${esc(String(q.status).replace(/\s/g, ''))}">${esc(q.status)}</span></span></button>`;
+  VIEWS.quotes = () => {
+    const all = (D().quotes || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.no.localeCompare(a.no));
+    const tab = S.docTab || 'quote', qs = all.filter(q => (q.type || 'quote') === tab);
+    return `
+      <div class="row between wrap" style="margin-bottom:12px"><h1 style="margin:0">Quotes & Invoices</h1>
+        <div class="row"><button class="btn sm" data-go="quote/newinv">${ic('plus')} New invoice</button><button class="btn primary sm" data-go="quote/new">${ic('plus')} New quotation</button></div></div>
+      <div class="seg" style="margin-bottom:12px"><button class="${tab === 'quote' ? 'on' : ''}" data-act="docTab" data-t="quote">Quotations</button><button class="${tab === 'invoice' ? 'on' : ''}" data-act="docTab" data-t="invoice">Invoices</button></div>
+      <div class="card"><div class="list">${qs.map(docRow).join('') || `<div class="empty">${tab === 'invoice' ? 'No invoices yet' : 'No quotations yet'}</div>`}</div></div>
       <div class="card"><div class="card-h"><h2>Print a form</h2></div>
         <p class="muted small" style="margin-top:0">Tip: open a job in Schedule → “Service report” fills in the customer, model and technician for you.</p>
         <div class="btns"><button class="btn" data-act="printForm" data-f="service">${ic('print')} Service report (blank)</button>
@@ -507,20 +515,35 @@
   };
 
   VIEWS.quote = arg => {
-    const ex = arg && arg !== 'new' && !arg.startsWith('new:') ? (D().quotes || []).find(q => q.no === arg) : null;
-    if (arg && arg !== 'new' && !arg.startsWith('new:') && !ex) return `<button class="btn ghost" data-go="quotes">${ic('left')} Quotes</button><div class="card mt"><div class="empty">Quotation not found</div></div>`;
-    const q = S.qd = ex ? JSON.parse(JSON.stringify(ex.data || {})) : newQuote(arg.startsWith('new:') ? decodeURIComponent(arg.slice(4)) : '');
-    if (ex) { q.no = ex.no; q.status = ex.status; }
+    arg = arg || 'new';
+    const isNew = /^(new|newinv|fromq)(:|$)/.test(arg);
+    const ex = !isNew ? (D().quotes || []).find(q => q.no === arg) : null;
+    if (!isNew && !ex) return `<button class="btn ghost" data-go="quotes">${ic('left')} Quotes</button><div class="card mt"><div class="empty">Quotation not found</div></div>`;
+    let q;
+    if (ex) q = Object.assign(JSON.parse(JSON.stringify(ex.data || {})), {no: ex.no, status: ex.status, type: ex.type || 'quote'});
+    else if (arg.startsWith('fromq:')) {
+      const src = (D().quotes || []).find(x => x.no === decodeURIComponent(arg.slice(6)));
+      q = Object.assign(newQuote('', 'invoice'), src ? JSON.parse(JSON.stringify(src.data || {})) : {}, {no: '', status: '', type: 'invoice', date: today(), by: S.me ? S.me.name : '', quoteRef: src ? src.no : ''});
+      q.due = ''; q.pay = LS.get('brz_paydetails', '');
+    } else q = newQuote(arg.includes(':') ? decodeURIComponent(arg.split(':').slice(1).join(':')) : '', arg.startsWith('newinv') ? 'invoice' : 'quote');
+    S.qd = q;
+    const inv = q.type === 'invoice';
+    S.docTab = inv ? 'invoice' : 'quote';
     return `
-      <button class="btn ghost sm" data-go="quotes" style="padding-left:0">${ic('left')} Quotes</button>
-      <div class="row between wrap"><h1>${ex ? esc(ex.no) : 'New quotation'}</h1>${ex ? `<span class="pill p-${esc(ex.status)}">${esc(ex.status)}</span>` : ''}</div>
+      <button class="btn ghost sm" data-go="quotes" style="padding-left:0">${ic('left')} ${inv ? 'Invoices' : 'Quotes'}</button>
+      <div class="row between wrap"><h1>${ex ? esc(ex.no) : inv ? 'New invoice' : 'New quotation'}</h1>${ex ? `<span class="pill p-${esc(String(ex.status).replace(/\s/g, ''))}">${esc(ex.status)}</span>` : ''}</div>
+      ${inv ? `<p class="muted small" style="margin-top:0">Temporary invoice layout — it will be changed to BRIZAIR's own invoice form.</p>` : ''}
       <div class="card"><h2 style="margin-bottom:12px">Customer</h2>
         <div class="f pick"><label>Customer name *</label><input id="q_customer" value="${esc(q.customer)}" autocomplete="off" placeholder="Type to search existing customers"><div class="pick-list hidden" id="q_pick"></div></div>
         <div class="f2"><div class="f"><label>Company</label><input id="q_company" value="${esc(q.company)}"></div><div class="f"><label>Contact person</label><input id="q_attn" value="${esc(q.attn)}"></div></div>
         <div class="f"><label>Address</label><input id="q_address" value="${esc(q.address)}"></div>
         <div class="f2"><div class="f"><label>Phone</label><input id="q_phone" value="${esc(q.phone)}" inputmode="tel"></div><div class="f"><label>Email</label><input id="q_email" value="${esc(q.email)}" inputmode="email"></div></div>
         <div class="f"><label>Project / subject</label><input id="q_project" value="${esc(q.project)}" placeholder="e.g. Supply and installation of 2 units split type"></div>
-        <div class="f2"><div class="f"><label>Date</label><input id="q_date" type="date" value="${esc(q.date)}"></div><div class="f"><label>Valid for</label><input id="q_valid" value="${esc(q.valid)}" placeholder="e.g. 15 days"></div></div>
+        ${inv ? `<div class="f2"><div class="f"><label>Invoice date</label><input id="q_date" type="date" value="${esc(q.date)}"></div><div class="f"><label>Due date</label><input id="q_due" type="date" value="${esc(q.due || '')}"></div></div>
+          <div class="f2"><div class="f"><label>Customer P.O. no.</label><input id="q_po" value="${esc(q.po || '')}"></div><div class="f"><label>Payment terms</label><input id="q_termsShort" value="${esc(q.termsShort || '')}" placeholder="e.g. 30 days, COD"></div></div>
+          <div class="f2"><div class="f"><label>Customer TIN</label><input id="q_tin" value="${esc(q.tin || '')}"></div><div class="f"><label>Business style</label><input id="q_style" value="${esc(q.style || '')}"></div></div>
+          ${q.quoteRef ? `<p class="muted small">From quotation ${esc(q.quoteRef)}</p>` : ''}`
+        : `<div class="f2"><div class="f"><label>Date</label><input id="q_date" type="date" value="${esc(q.date)}"></div><div class="f"><label>Valid for</label><input id="q_valid" value="${esc(q.valid)}" placeholder="e.g. 15 days"></div></div>`}
       </div>
       <div class="card"><div class="card-h"><h2>Items</h2></div>
         <div class="f pick" style="margin-bottom:10px"><input id="q_add" placeholder="➕ Add from stock: type model or part…" autocomplete="off"><div class="pick-list hidden" id="q_addpick"></div></div>
@@ -530,16 +553,19 @@
           <div class="f"><label>VAT</label><select id="q_vat">${[['incl', 'Prices include 12% VAT'], ['add', 'Add 12% VAT'], ['none', 'No VAT line']].map(v => `<option value="${v[0]}" ${q.vat === v[0] ? 'selected' : ''}>${v[1]}</option>`).join('')}</select></div></div>
         <div class="qtot" id="q_tot"></div>
       </div>
+      ${inv ? `<div class="card"><div class="f"><label>Payment details (bank / GCash) — printed on the invoice</label><textarea id="q_pay" placeholder="e.g. BDO · Account name: BRIZAIR CORP · Account no. ...">${esc(q.pay || '')}</textarea><div class="hint">Saved on this phone for the next invoice.</div></div>
+        ${!ex ? `<label class="row small" style="font-weight:600"><input type="checkbox" id="q_ar" checked> Also add to Money (receivables) so payments are tracked</label>` : ''}</div>` : ''}
       <div class="card"><div class="f" style="margin:0"><label>Notes & terms (printed at the bottom)</label><textarea id="q_terms" placeholder="e.g. payment terms, delivery, warranty">${esc(q.terms)}</textarea></div></div>
-      <div class="btns mt" style="position:sticky;bottom:calc(var(--tabs-h) + 10px);z-index:5">
+      <div class="btns mt savebar">
         <button class="btn primary" data-act="qSave">${ic('check')} Save</button>
         <button class="btn" data-act="qSave" data-print="1">${ic('print')} Save & print / PDF</button>
         ${ex ? `<button class="btn" data-act="qStatus">Status…</button>` : ''}
+        ${ex && !inv ? `<button class="btn" data-go="quote/fromq:${encodeURIComponent(ex.no)}">${ic('doc')} Make invoice</button>` : ''}
       </div>`;
   };
-  function newQuote(cust) {
+  function newQuote(cust, type) {
     const g = cust ? custGroups().get(cust) : null;
-    return {customer: cust || '', company: g ? Array.from(g.co)[0] || '' : '', address: g ? Array.from(g.locs)[0] || '' : '', attn: '', phone: '', email: '',
+    return {type: type || 'quote', due: '', po: '', termsShort: '', tin: '', style: '', pay: type === 'invoice' ? LS.get('brz_paydetails', '') : '', customer: cust || '', company: g ? Array.from(g.co)[0] || '' : '', address: g ? Array.from(g.locs)[0] || '' : '', attn: '', phone: '', email: '',
       project: '', date: today(), valid: '', items: [], discount: 0, vat: 'incl', terms: '', by: S.me ? S.me.name : ''};
   }
   function qCalc(q) {
@@ -568,7 +594,8 @@
   }
   function qRead() {
     const q = S.qd;
-    ['customer', 'company', 'attn', 'address', 'phone', 'email', 'project', 'date', 'valid', 'terms'].forEach(k => { const el = $('#q_' + k); if (el) q[k] = el.value.trim(); });
+    ['customer', 'company', 'attn', 'address', 'phone', 'email', 'project', 'date', 'valid', 'terms', 'due', 'po', 'termsShort', 'tin', 'style', 'pay'].forEach(k => { const el = $('#q_' + k); if (el) q[k] = el.value.trim(); });
+    if (q.type === 'invoice' && q.pay) LS.set('brz_paydetails', q.pay);
     q.discount = +($('#q_disc').value.replace(/,/g, '')) || 0;
     q.vat = $('#q_vat').value;
     q.items = q.items.filter(it => String(it.desc).trim() || +it.price);
@@ -655,8 +682,9 @@
 
   VIEWS.more = () => `<h1>More</h1><p class="sub">Logged in as <b>${esc(S.me && S.me.name)}</b></p>
     <div class="card"><div class="list">
-      ${[['ask', 'Ask GPT', 'chat', 'c-blue'], ['materials', 'Materials for AI (upload)', 'book', 'c-violet'], ['money', 'Money — unpaid & payments', 'peso', 'c-amber'], ['quotes', 'Quotes & Forms', 'doc', 'c-red'], ['report', 'LG Monthly Report', 'chart', 'c-green'], ['activity', 'Activity', 'log', 'c-blue'], ['help', 'Help', 'help', 'c-violet']]
+      ${[['ask', 'Ask GPT', 'chat', 'c-blue'], ['materials', 'Materials for AI (upload)', 'book', 'c-violet'], ['money', 'Money — unpaid & payments', 'peso', 'c-amber'], ['quotes', 'Quotes, invoices & forms', 'doc', 'c-red'], ['report', 'LG Monthly Report', 'chart', 'c-green'], ['activity', 'Activity', 'log', 'c-blue'], ['help', 'Help', 'help', 'c-violet']]
         .map(x => `<button class="item" data-go="${x[0]}"><span class="qi ${x[3]}" style="width:38px;height:38px">${ic(x[2])}</span><span class="grow t">${x[1]}</span>${ic('right')}</button>`).join('')}
+      <button class="item" data-act="lang"><span class="qi c-blue" style="width:38px;height:38px"><b class="noi18n">A/가</b></span><span class="grow t">Language</span><span class="muted small noi18n">${lang() === 'ko' ? '한국어 → English' : 'English → 한국어'}</span></button>
       <button class="item" data-act="openSheet"><span class="qi c-teal" style="width:38px;height:38px">${ic('sheet')}</span><span class="grow t">Open Google Sheet</span>${ic('right')}</button>
       <button class="item" data-act="logout"><span class="qi" style="width:38px;height:38px;background:var(--bg)">${ic('out')}</span><span class="grow t">Log out</span></button>
     </div></div>
@@ -665,8 +693,10 @@
   // ask GPT
   function askItem(a) {
     const st = a.status || '';
-    const ans = st === 'answered' ? `<div class="bub ai">${fmtAnswer(a.a)}</div>`
-      : st === 'error' ? `<div class="bub ai err">Sorry, the AI could not answer this one. Please ask again in a different way, or ask Sir Kim.</div>`
+    const rate = st === 'answered' && a.who === (S.me && S.me.name) ? (a.rating ? `<div class="rated">${/^good/.test(a.rating) ? '👍' : '👎'}</div>`
+      : `<div class="rate"><span>Was this answer helpful?</span><button data-act="rate" data-id="${esc(a.id)}" data-good="1">👍 Good</button><button data-act="rate" data-id="${esc(a.id)}" data-good="">👎 Wrong / not enough</button></div>`) : '';
+    const ans = st === 'answered' ? `<div class="bub ai">${fmtAnswer(a.a)}</div>${rate}`
+      : st === 'error' ? `<div class="bub ai err">${/^GPT LIMIT: /.test(a.a || '') ? esc(a.a.replace(/^GPT LIMIT: /, '')) : 'Sorry, GPT could not answer this one. Please ask again in a different way, or ask Sir Kim.'}</div>`
       : `<div class="bub ai wait"><span class="dots3"><i></i><i></i><i></i></span> ${st.indexOf('thinking') === 0 ? 'GPT is reading the sheet…' : D().aiOnline === false ? 'Waiting — Sir Kim\'s PC is offline. It will answer when the PC is on.' : 'Sent. GPT will answer in about 20–60 seconds…'}</div>`;
     return `<div class="qa"><div class="meta">${esc(a.who)} · ${esc(String(a.time || '').slice(5))}</div><div class="bub me">${esc(a.q)}</div>${ans}</div>`;
   }
@@ -677,7 +707,7 @@
     const list = (D().ask || []).slice(-40);
     const on = D().aiOnline;
     return `<div class="row between wrap"><h1 style="margin:0">Ask GPT</h1><button class="btn sm" data-go="materials">${ic('book')} Materials for AI</button></div>
-      <p class="sub" style="margin-top:6px">GPT reads the whole office sheet and the uploaded materials, then answers. English, Tagalog or Korean is OK.
+      <p class="sub" style="margin-top:6px">GPT reads the whole office sheet and the uploaded materials, then answers. English, Tagalog, Kapampangan or Korean is OK.
         <br><span class="pill ${on ? 'p-Done' : 'p-Moved'}">${on ? '● GPT online' : '● GPT offline — Sir Kim\'s PC is off'}</span></p>
       <div id="qaList" class="qalist">${list.map(askItem).join('') || `<div class="empty">No questions yet. Try:<br>“How many HSN12 units do we have?”<br>“How much does Kodec still owe?”<br>“When is the next cleaning for Café Dia?”</div>`}</div>
       <form id="askForm" class="askform"><textarea id="askQ" rows="1" placeholder="Type your question…"></textarea><button class="btn primary" aria-label="Send">${ic('send')}</button></form>`;
@@ -727,6 +757,10 @@
         <button data-act="kUpload"><span class="qi c-blue">${ic('upload')}</span>Upload a file or photo</button>
         <button data-act="kNote"><span class="qi c-violet">${ic('edit')}</span>Write a rule / answer</button>
       </div>
+      ${(D().needs || []).length ? `<div class="card"><div class="card-h"><h2>GPT needs this information</h2><span class="muted small">${D().needs.length}</span></div>
+        <p class="muted small" style="margin-top:0">Questions GPT could not answer well — upload the missing info so it can answer next time.</p><div class="list">
+        ${D().needs.slice(0, 15).map(n => `<div class="item" style="align-items:flex-start"><span class="grow"><div class="t small" style="white-space:normal">“${esc(n.q)}”</div>
+          <div class="s" style="white-space:normal">${esc(n.missing || (/^bad/.test(n.rating) ? 'Marked wrong: ' + n.rating.replace(/^bad:\s*/, '') : 'No answer'))}</div></span><span class="r muted small">${esc(String(n.time).slice(5, 10))}</span></div>`).join('')}</div></div>` : ''}
       <div class="card"><div class="card-h"><h2>Uploaded (${ks.length})</h2></div><div class="list">
         ${ks.map(k => `<div class="item" style="align-items:flex-start"><span class="qi ${k.type === 'File' ? 'c-blue' : 'c-violet'}" style="width:36px;height:36px">${ic(k.type === 'File' ? 'doc' : 'edit')}</span>
           <span class="grow"><div class="t">${esc(k.title)}</div><div class="s">${esc([fmtD(k.date, {year: 'numeric'}), k.who].filter(Boolean).join(' · '))}</div>
@@ -736,14 +770,16 @@
       <p class="muted small">Tip: one topic per upload, with a clear title (e.g. “LG price list Nov 2026”). Wrong or old? Tap ✕ to remove it.</p>`;
   };
 
-  VIEWS.help = () => `<h1>How to use</h1><p class="sub">Everything is saved to the BRIZAIR Office Sheet. Sir Kim gets a Telegram alert for every change.</p>
+  VIEWS.help = () => `<h1>How to use</h1><p class="sub">Everything is saved to the BRIZAIR Office Sheet. Every change is listed in Activity.</p>
     <div class="card"><div class="list">
       ${[['📅 New job', 'Tap + → New job. Pick the date, job type and customer. When the job is done, open it and tap “Done”.'],
         ['📦 Unit came in / went out', 'Tap + → Unit in / out. Choose the model, IN or OUT, and the quantity. Stock updates by itself.'],
         ['🔧 Part used', 'Tap + → Part in / out → OUT. Write the customer name.'],
         ['💵 Customer paid', 'Tap + → Payment. Choose the customer / project and type the amount. The balance updates by itself.'],
         ['🧽 Cleaning done', 'Customers → find the customer → “Cleaned” on the unit. Next cleaning (6 months) is automatic.'],
-        ['📄 Quotation', 'Quotes & Forms → New quotation. Add items from stock (price fills in), save, then Print / PDF and send to the customer.'],
+        ['📄 Quotation', 'Quotes & Invoices → New quotation. Add items from stock (price fills in), save, then Print / PDF and send to the customer.'],
+        ['🧾 Invoice', 'Quotes & Invoices → New invoice (or open a quotation → Make invoice). Save & print / PDF. It can add itself to Money so payments are tracked.'],
+        ['💬 Ask GPT', 'Bottom middle button. Ask in English, Tagalog, Kapampangan or Korean. Wrong answer? Tap 👎 and upload the right info in Materials for AI.'],
         ['🖨️ Service report / Start-up form', 'Open a job → Service report or Start-up report. Customer, model and technician are filled in.'],
         ['📊 LG monthly report', 'More → LG Monthly Report → choose the month → Print / PDF.'],
         ['❓ Mistake?', 'Open the item again and fix it, or record a correction (e.g. an IN to cancel a wrong OUT). Nothing is deleted.']]
@@ -905,6 +941,7 @@
   window.addEventListener('afterprint', () => { document.body.classList.remove('printing'); });
 
   function quoteDoc(q) {
+    if (q.type === 'invoice') return invoiceDoc(q);
     const c = qCalc(q);
     return `<div class="doc">${letterhead()}
       <h3>QUOTATION</h3>
@@ -920,6 +957,28 @@
         <tr><td colspan="4" class="r"><b>TOTAL AMOUNT (PHP)</b>${q.vat === 'incl' ? '<br><span class="tiny">VAT inclusive (VAT ' + money(c.vat) + ')</span>' : ''}</td><td class="r"><b>${money(c.total)}</b></td></tr></tbody></table>
       ${q.terms ? `<p style="margin-top:12px"><b>Notes & terms:</b><br>${esc(q.terms).replace(/\n/g, '<br>')}</p>` : ''}
       <div class="sig"><div>Prepared by<br><b>${esc(q.by || '')}</b></div><div>Approved by<br><b>&nbsp;</b></div><div>Conforme (customer)<br><b>&nbsp;</b></div></div></div>`;
+  }
+
+  function invoiceDoc(q) {
+    const c = qCalc(q);
+    return `<div class="doc">${letterhead()}
+      <h3>INVOICE</h3>
+      <table class="noline" style="margin-bottom:10px"><tr><td style="width:58%"><b>Bill to:</b> ${esc(q.customer)}${q.company && q.company !== q.customer ? '<br>' + esc(q.company) : ''}${q.address ? '<br>' + esc(q.address) : ''}
+        ${q.tin ? '<br><b>TIN:</b> ' + esc(q.tin) : ''}${q.style ? '<br><b>Business style:</b> ' + esc(q.style) : ''}${q.attn ? '<br><b>Attn:</b> ' + esc(q.attn) : ''}${q.phone ? '<br><b>Tel:</b> ' + esc(q.phone) : ''}</td>
+        <td><b>Invoice No.:</b> ${esc(q.no || '(draft)')}<br><b>Date:</b> ${esc(fmtMDY(q.date))}${q.due ? '<br><b>Due date:</b> ' + esc(fmtMDY(q.due)) : ''}${q.termsShort ? '<br><b>Terms:</b> ' + esc(q.termsShort) : ''}
+        ${q.po ? '<br><b>Customer P.O.:</b> ' + esc(q.po) : ''}${q.quoteRef ? '<br><b>Ref. quotation:</b> ' + esc(q.quoteRef) : ''}</td></tr></table>
+      ${q.project ? `<p><b>Project:</b> ${esc(q.project)}</p>` : ''}
+      <table><thead><tr><th style="width:36px" class="c">#</th><th>Description</th><th style="width:50px" class="c">Qty</th><th style="width:110px" class="r">Unit price</th><th style="width:120px" class="r">Amount</th></tr></thead>
+      <tbody>${q.items.map((it, i) => `<tr><td class="c">${i + 1}</td><td>${esc(it.desc)}</td><td class="c">${esc(it.qty)}</td><td class="r">${money(it.price)}</td><td class="r">${money((+it.qty || 0) * (+it.price || 0))}</td></tr>`).join('')}
+        <tr><td colspan="4" class="r">Subtotal</td><td class="r">${money(c.sub)}</td></tr>
+        ${c.disc ? `<tr><td colspan="4" class="r">Less: discount</td><td class="r">(${money(c.disc)})</td></tr>` : ''}
+        ${q.vat === 'add' ? `<tr><td colspan="4" class="r">Add: 12% VAT</td><td class="r">${money(c.vat)}</td></tr>` : ''}
+        ${q.vat === 'incl' ? `<tr><td colspan="4" class="r">VATable sales</td><td class="r">${money(c.total - c.vat)}</td></tr><tr><td colspan="4" class="r">VAT (12%)</td><td class="r">${money(c.vat)}</td></tr>` : ''}
+        <tr><td colspan="4" class="r"><b>TOTAL AMOUNT DUE (PHP)</b></td><td class="r"><b>${money(c.total)}</b></td></tr></tbody></table>
+      ${q.pay ? `<p style="margin-top:12px"><b>Payment details:</b><br>${esc(q.pay).replace(/\n/g, '<br>')}</p>` : ''}
+      ${q.terms ? `<p><b>Notes:</b><br>${esc(q.terms).replace(/\n/g, '<br>')}</p>` : ''}
+      <div class="sig" style="grid-template-columns:1fr 1fr"><div>Prepared by<br><b>${esc(q.by || '')}</b></div><div>Received by (customer) / Date</div></div>
+      <p class="tiny" style="text-align:center;margin-top:18px">This document is not valid for claim of input tax. An Official Receipt / Sales Invoice will be issued upon payment.</p></div>`;
   }
 
   function serviceDoc(j) {
@@ -1002,8 +1061,10 @@
         <button data-act="clean"><span class="qi c-violet">${ic('spark')}</span>Cleaning done</button>
         <button data-act="install"><span class="qi c-blue">${ic('users')}</span>New installation</button>
         <button data-act="goQuote"><span class="qi c-red">${ic('doc')}</span>Quotation</button>
+        <button data-act="goInvoice"><span class="qi c-violet">${ic('doc')}</span>Invoice</button>
         <button data-act="newAr"><span class="qi c-amber">${ic('doc')}</span>New contract (receivable)</button></div>`),
     goQuote: () => { closeSheet(); go('quote/new'); },
+    goInvoice: () => { closeSheet(); go('quote/newinv'); },
     newJob: el => openSheet('New job', jobForm(null, {date: el.dataset.date, cust: el.dataset.cust}),
       `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveJob">Save job</button>`),
     saveJob: async el => {
@@ -1133,8 +1194,13 @@
       if (!q.items.length) return toast('Add at least one item', true);
       el.disabled = true;
       try {
+        const isNewInv = q.type === 'invoice' && !q.no, addAr = isNewInv && $('#q_ar') && $('#q_ar').checked;
         const r = await call('saveQuote', {quote: q});
         q.no = r.no;
+        if (addAr) {
+          try { await call('newReceivable', {rec: {project: (q.customer + ' ' + r.no).slice(0, 110), ref: r.no + (q.po ? ' / PO ' + q.po : ''), contract: String(q.total), balance: String(q.total), remarks: q.due ? 'due ' + fmtD(q.due, {year: 'numeric'}) : ''}}); }
+          catch (e) { toast('Invoice saved, but could not add to Money: ' + e.message, true); }
+        }
         toast('Saved ✓ ' + r.no);
         if (el.dataset.print) printHtml(quoteDoc(q));
         S.forceRender = true;
@@ -1145,14 +1211,48 @@
     },
     qStatus: () => {
       const q = S.qd;
-      openSheet('Quotation status', `<p class="muted">${esc(q.no)} · ${esc(q.customer)}</p>${choice('qst', ['Draft', 'Sent', 'Accepted', 'Lost'], q.status)}
-        <p class="hint mt">Accepted? Add it in Money → New contract so the balance is tracked.</p>`,
+      const inv = q.type === 'invoice';
+      openSheet(inv ? 'Invoice status' : 'Quotation status', `<p class="muted">${esc(q.no)} · ${esc(q.customer)}</p>${choice('qst', inv ? ['Unpaid', 'Partially paid', 'Paid', 'Cancelled'] : ['Draft', 'Sent', 'Accepted', 'Lost'], q.status)}
+        <p class="hint mt">${inv ? 'Payments are recorded in Money → Payment received.' : 'Accepted? Tap “Make invoice”, or add it in Money → New contract so the balance is tracked.'}</p>`,
         `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="qStatusSave">Save</button>`);
     },
     qStatusSave: async el => {
       const v = ($('input[name=qst]:checked') || {}).value; if (!v) return;
       el.disabled = true;
       try { await save('quoteStatus', {no: S.qd.no, status: v}, 'Status: ' + v); } catch (e) { el.disabled = false; }
+    },
+    docTab: el => { S.docTab = el.dataset.t; render(); },
+    lang: () => {
+      if (!window.BRZ_I18N) return;
+      window.BRZ_I18N.set(lang() === 'ko' ? 'en' : 'ko');
+      closeSheet(); shell(); render();
+    },
+    rate: async el => {
+      const good = !!el.dataset.good;
+      let why = '';
+      if (!good) { why = window.prompt(tr('What was wrong or missing? (optional)')) || ''; }
+      const a = (S.D.ask || []).find(x => x.id === el.dataset.id);
+      try { await call('askRate', {id: el.dataset.id, good, why}); if (a) a.rating = good ? 'good' : 'bad: ' + why; toast(good ? 'Thanks! ✓' : 'Thanks — saved so we can teach GPT'); render(); } catch (e) { toast(e.message, true); }
+    },
+    help: () => {
+      LS.set('brz_seen_help', true);
+      const r = S.route || 'home';
+      const tips = {
+        schedule: ['Tap a day to see its jobs. Tap a job to change status (Confirmed / Done) or print the Service report.', 'New job: the blue “New job” button.'],
+        stock: ['Tap a model to see stock and recent moves, then IN or OUT.', 'Unit came from the supplier = IN. Installed / sold = OUT.'],
+        customers: ['Search by name, place, model or serial number.', 'Open a customer → “Cleaned” after cleaning; next cleaning is set 6 months later.'],
+        money: ['Customer paid → “Payment received”. The balance updates by itself.', 'New sale on credit → “New contract”. “Statement” prints a statement of account.'],
+        quotes: ['New quotation → add items from stock (price fills in) → Save & print / PDF.', 'Quotation accepted → open it → “Make invoice”.'],
+        quote: ['Type the customer, add items from stock, then Save & print / PDF.', 'Invoices can add themselves to Money so payments are tracked.'],
+        ask: ['Ask like you talk to a person. English, Tagalog, Kapampangan or Korean.', 'Answer wrong or missing? Tap 👎 — then upload the right info in Materials for AI.'],
+        materials: ['Upload price lists, LG brochures, warranty rules, sample documents, photos of papers.', 'Or tap “Write a rule / answer” and type it. GPT reads it from the next question.'],
+        report: ['Choose units or parts and the month → Print / PDF for LG.']
+      }[r] || ['Tap the big buttons on Home for daily work: New job, Unit in / out, Part in / out, Payment, Cleaning done, Quotation.', 'Not sure? Ask GPT (bottom middle) — e.g. “How do I record a unit we installed today?”'];
+      openSheet('How to use', `
+        <div class="list">${tips.map(t => `<div class="item" style="align-items:flex-start"><span class="qi c-blue" style="width:30px;height:30px;font-weight:800">✓</span><span class="grow" style="white-space:normal">${esc(t)}</span></div>`).join('')}</div>
+        <div class="card mt" style="background:var(--brand-2);box-shadow:none"><b>Ask GPT in your language</b><div class="small" style="margin-top:4px">English · Tagalog / Taglish · Kapampangan · 한국어</div></div>
+        <div class="card mt" style="box-shadow:none;border:1px solid var(--line)"><b>Everything you save goes to the BRIZAIR Office Sheet.</b><div class="small muted" style="margin-top:4px">Nothing is deleted. Made a mistake? Open it and fix it, or record a correction.</div></div>`,
+        `<button class="btn" data-go="help">All instructions</button><button class="btn primary" data-act="close">OK, got it</button>`);
     },
     printForm: el => {
       const j = el.dataset.r ? (D().schedule || []).find(x => x.r === +el.dataset.r) : null;
@@ -1191,7 +1291,7 @@
     },
     repKind: el => { S.rep.kind = el.dataset.k; render(); }
   };
-  function confirmBox(msg) { return window.confirm(msg); }
+  function confirmBox(msg) { return window.confirm(tr(msg)); }
 
   document.addEventListener('click', e => {
     const g = e.target.closest('[data-go]');
