@@ -359,3 +359,26 @@ table.tbl { border-collapse: collapse; width: 100%; font-size: 13px; }
 .doc.wide td:first-child { text-align: left; white-space: nowrap; max-width: 230px; overflow: hidden; }
 .doc.wide .in { background: #e3f6ec; } .doc.wide .out { background: #fdecea; }
 .preview { background: #fff; padding: 24px; border-radius: var(--radius); box-shadow: var(--shadow); overflow: auto; }
+
+/* ask GPT */
+.askbar { width: 100%; display: flex; align-items: center; gap: 12px; border: 1px solid #cdd9f5; background: #fff; border-radius: 14px; padding: 14px 16px; margin: 4px 0 14px;
+  font-size: 15.5px; color: var(--ink-2); text-align: left; box-shadow: var(--shadow); }
+.askbar svg { width: 22px; height: 22px; color: var(--brand); flex-shrink: 0; }
+.qalist { display: flex; flex-direction: column; gap: 14px; margin: 12px 0 90px; }
+.qa { display: flex; flex-direction: column; gap: 6px; }
+.qa .meta { font-size: 12px; color: var(--ink-3); text-align: right; }
+.bub { max-width: 88%; padding: 11px 14px; border-radius: 16px; font-size: 15px; line-height: 1.5; word-wrap: break-word; }
+.bub.me { align-self: flex-end; background: var(--brand); color: #fff; border-bottom-right-radius: 5px; }
+.bub.ai { align-self: flex-start; background: var(--card); box-shadow: var(--shadow); border-bottom-left-radius: 5px; }
+.bub.ai.wait { color: var(--ink-2); font-size: 14px; }
+.bub.ai.err { color: var(--red); }
+.dots3 { display: inline-flex; gap: 3px; vertical-align: middle; margin-right: 4px; }
+.dots3 i { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); animation: pulse 1s infinite; }
+.dots3 i:nth-child(2) { animation-delay: .2s; } .dots3 i:nth-child(3) { animation-delay: .4s; }
+.askform { position: fixed; left: 0; right: 0; bottom: calc(var(--tabs-h) + env(safe-area-inset-bottom)); z-index: 25; display: flex; gap: 8px; align-items: flex-end;
+  padding: 10px 12px; background: rgba(243, 245, 249, .96); border-top: 1px solid var(--line); }
+.askform textarea { flex: 1; border: 1px solid #cfd8e3; border-radius: 14px; padding: 12px 14px; font-size: 16px; resize: none; max-height: 160px; background: #fff; }
+.askform .btn { min-width: 52px; height: 48px; border-radius: 14px; }
+@media (min-width: 900px) { .askform { left: 230px; bottom: 0; padding: 14px 28px; } .qalist { margin-bottom: 110px; } }
+.me.on { border-color: var(--brand); color: var(--brand); }
+body[data-route=ask] .fab { display: none; }

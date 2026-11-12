@@ -54,7 +54,7 @@
     const partLog = [{r: 2, date: add(-1), item: 'Capacitor 35uF', dir: 'OUT', qty: 1, party: 'Pampanga Dental Clinic', ref: '', by: 'Ladie', notes: ''}];
     const D = {ok: true, me: null, sheetUrl: 'https://docs.google.com/spreadsheets/', jobs: ['Install', 'Service (AS)', 'Cleaning', 'Survey', 'Delivery', 'Pull-out', 'Meeting', 'Other'],
       statuses: ['Scheduled', 'Confirmed', 'Done', 'Moved', 'Cancelled'], methods: ['Cash', 'Bank', 'GCash', 'Check', 'Other'],
-      units, parts, unitLog, partLog, schedule: sched, receivables, payments: [], customers, quotes: [], log: [], arTotal: null};
+      units, parts, unitLog, partLog, schedule: sched, receivables, payments: [], customers, quotes: [], log: [], arTotal: null, ask: [], know: [], aiOnline: true};
     recalc(D);
     return D;
   }
@@ -75,6 +75,7 @@
   function db() {
     if (!DB) { try { DB = JSON.parse(localStorage.getItem('brz_demo_db') || 'null'); } catch (e) { DB = null; } }
     if (!DB || DB.day !== T) DB = Object.assign(fresh(), {day: T});
+    DB.ask = DB.ask || []; DB.know = DB.know || []; DB.aiOnline = true;
     return DB;
   }
   function persist() { try { localStorage.setItem('brz_demo_db', JSON.stringify(DB)); } catch (e) { } }
@@ -93,6 +94,26 @@
     const D = db();
     if (a === 'boot') { D.me = me; return JSON.parse(JSON.stringify(D)); }
     if (a === 'logout') return {ok: true};
+    if (a === 'ask') {
+      const id = 'A' + (++seq); D.ask.push({id, who: me.name, time: new Date().toLocaleString('sv-SE', {timeZone: 'Asia/Manila'}).slice(0, 16), q: b.q, status: 'waiting', a: ''});
+      persist(); return {ok: true, id};
+    }
+    if (a === 'askGet') {
+      D.ask.forEach(x => {
+        if (x.status !== 'answered' && b.ids.includes(x.id)) {
+          x.st = (x.st || 0) + 1;
+          if (x.st === 1) x.status = 'thinking@1';
+          if (x.st >= 3) { x.status = 'answered'; x.a = demoAnswer(x.q, D); }
+        }
+      });
+      persist(); return {ok: true, items: D.ask.filter(x => b.ids.includes(x.id)), aiOnline: true};
+    }
+    if (a === 'kNote' || a === 'kUpload') {
+      D.know.unshift({id: 'K' + (++seq), date: T, who: me.name, title: b.title || (b.text || '').slice(0, 50) || b.name, type: a === 'kNote' ? 'Note' : 'File',
+        text: a === 'kNote' ? b.text : (b.note ? 'Note: ' + b.note + '\n' : '') + '(demo: file text would appear here)', url: ''});
+      log(me, 'Material added', b.title || b.name || ''); persist(); return {ok: true, chars: a === 'kUpload' ? 1200 : 0};
+    }
+    if (a === 'kHide') { D.know = D.know.filter(k => k.id !== b.id); persist(); return {ok: true}; }
     if (a === 'addJob') {
       const j = b.job; if (!j.date || !j.customer) err('Date and customer are needed');
       D.schedule.push(Object.assign({r: ++seq, status: 'Scheduled', by: me.name, id: 'DEMO-S-' + seq}, j));
@@ -131,6 +152,14 @@
     } else err('unknown action');
     recalc(D); persist();
     return {ok: true};
+  }
+  function demoAnswer(q, D) {
+    const t = q.toLowerCase();
+    const u = D.units.find(x => t.includes(x.item.slice(0, 5).toLowerCase()));
+    if (u) return `We have **${u.now}** unit(s) of ${u.item} (${u.type} ${u.hp}) in stock now. SRP is ₱${u.srp.toLocaleString('en-US')}.\n(Source: UNITS tab, demo data)`;
+    const r = D.receivables.find(x => t.includes(x.project.split(' ')[0].toLowerCase()));
+    if (r) return `${r.project} still owes **₱${r.bal.toLocaleString('en-US', {minimumFractionDigits: 2})}** (${r.status}). ${r.remarks || ''}\n(Source: RECEIVABLES tab, demo data)`;
+    return 'This is the DEMO. In the real site, GPT on Sir Kim\'s PC reads the whole office sheet and the uploaded materials, then answers here in 20–60 seconds.';
   }
   window.BRZ_DEMO = {call};
 })();
