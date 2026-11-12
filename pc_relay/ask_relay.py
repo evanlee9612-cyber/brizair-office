@@ -137,16 +137,20 @@ def summaries(tabs, at):
     # stock
     rows, ix = table(tabs.get('UNITS', []))
     lines = [f'# Aircon units IN STOCK now (from UNITS tab, {at})', '', 'Item | Type | HP | NOW | SRP (customer price) | Cost | Supplier']
-    tot_units, tot_cost = 0, 0.0
+    tot_units, tot_cost, panels = 0, 0.0, 0
     for r in rows:
         n = num(cell(r, ix, 'now'))
         if n and n > 0:
             c = num(cell(r, ix, 'cost')) or 0
-            tot_units += n
+            if re.search(r'\bPT-|front panel', cell(r, ix, 'item') + ' ' + cell(r, ix, 'type'), re.I):
+                panels += n
+            else:
+                tot_units += n
             tot_cost += n * c
             lines.append(' | '.join([cell(r, ix, 'item'), cell(r, ix, 'type'), cell(r, ix, 'hp'), f'{n:g}', cell(r, ix, 'srp'), cell(r, ix, 'cost'), cell(r, ix, 'supplier')]))
-    lines += ['', f'TOTAL units on hand: {tot_units:g} · total cost value: {peso(tot_cost)} (NOW × Cost)',
-              'Items not listed here have 0 stock. Front panels are listed as separate items.']
+    lines += ['', f'TOTAL on hand: {tot_units:g} aircon units (indoor/outdoor sets, not counting panels) + {panels:g} front panels · '
+                  f'total cost value {peso(tot_cost)} (NOW × Cost, panels included)',
+              'Items not listed here have 0 stock. Some models appear twice (bought on different POs at different costs) — add them up.']
     rows, ix = table(tabs.get('PARTS', []))
     pl, pcount, pcost = [], 0, 0.0
     for r in rows:
@@ -217,6 +221,9 @@ def summaries(tabs, at):
         if inst and cell(r, ix, 'customer'):
             by_year[inst.year] = by_year.get(inst.year, 0) + 1
     lines += ['', '## Installed unit rows per year (by installed date; one row = one unit line in CUSTOMERS)'] + [f'- {y}: {n}' for y, n in sorted(by_year.items())]
+    odd = [y for y in by_year if y > today.year + 1 or y < 2000]
+    if odd:
+        lines.append(f'- NOTE: years {odd} look like typing mistakes in the sheet (e.g. 2923 → 2023?). Mention it if relevant.')
     out['customer_index.md'] = '\n'.join(lines) + '\n'
     # schedule
     rows, ix = table(tabs.get('SCHEDULE', []))

@@ -148,6 +148,10 @@
     'Photos': '사진', 'Add photos': '사진 올리기', 'Open photos': '사진 보기', 'Photos are saved in Google Drive, one folder per job.': '사진은 구글 드라이브에 일정별 폴더로 저장돼요.',
     'Map': '지도', 'Book cleaning': '청소 예약', 'Uploading photo': '사진 올리는 중', 'photo(s) saved ✓': '장 저장했어요 ✓', 'Could not read this photo': '이 사진을 읽을 수 없어요',
     'Questions GPT could not answer well': 'GPT가 잘 못 답한 질문',
+    'No internet. Please try again.': '인터넷이 안 돼요. 다시 해 주세요.', 'Could not reach the server. Please try again.': '서버에 연결이 안 돼요. 다시 해 주세요.',
+    'The server is busy. Please try again in a minute.': '서버가 바빠요. 1분 뒤 다시 해 주세요.',
+    '✅ To do (Home)': '✅ 할 일 (홈)', 'Home shows what needs attention: old jobs to update, overdue invoices, quotations to follow up, customers to book for cleaning.': '홈에서 챙길 일을 모아 보여 줘요: 상태 정리할 지난 일정, 기한 지난 인보이스, 후속 연락할 견적, 청소 예약할 손님.',
+    '📷 Job photos': '📷 현장 사진', 'Open a job → Add photos. They are saved in Google Drive, one folder per job.': '일정 열기 → 사진 올리기. 구글 드라이브에 일정별 폴더로 저장돼요.',
     // more / help
     'Money — unpaid & payments': '돈 — 미수금·입금', 'Materials for AI (upload)': 'AI 자료 올리기', 'Language': '언어', 'How to use': '사용법',
     'No activity yet': '기록 없음', 'Latest changes made on this site (also saved in the sheet tab APP LOG).': '사이트에서 바꾼 최근 내용 (시트 APP LOG 탭에도 저장돼요).',

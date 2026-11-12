@@ -84,8 +84,11 @@
   // ───────── server ─────────
   async function call(a, body) {
     if (DEMO) return window.BRZ_DEMO.call(a, body || {}, S);
-    const res = await fetch(API, {method: 'POST', body: JSON.stringify(Object.assign({a: a, t: S.t}, body || {}))});
-    const j = await res.json();
+    let res, j;
+    try {
+      res = await fetch(API, {method: 'POST', body: JSON.stringify(Object.assign({a: a, t: S.t}, body || {}))});
+    } catch (e) { throw new Error(navigator.onLine === false ? 'No internet. Please try again.' : 'Could not reach the server. Please try again.'); }
+    try { j = await res.json(); } catch (e) { throw new Error('The server is busy. Please try again in a minute.'); }
     if (j.error === 'login') { logout(true); throw new Error('Please log in again'); }
     if (!j.ok) throw new Error(j.msg || j.error || 'Error');
     return j;
@@ -172,7 +175,11 @@
         if (window.BRZ_I18N) window.BRZ_I18N.defaultFor(r.me.role);
         start();
         if (!LS.get('brz_seen_help', false)) setTimeout(() => ACT.help(), 600);
-      } catch (e) { pin = ''; dots(); $('#perr').textContent = e.message || 'Wrong PIN'; }
+      } catch (e) {
+        pin = ''; dots();
+        const m = String(e.message || '');
+        $('#perr').textContent = tr(/fetch|network|json|token/i.test(m) ? 'Could not reach the server. Please try again.' : (m || 'Wrong PIN'));
+      }
     };
     $('.pad').addEventListener('click', e => {
       const k = e.target.closest('button'); if (!k) return;
@@ -839,6 +846,8 @@
         ['💬 Ask GPT', 'Bottom middle button. Ask in English, Tagalog, Kapampangan or Korean. Wrong answer? Tap 👎 and upload the right info in Materials for AI.'],
         ['🖨️ Service report / Start-up form', 'Open a job → Service report or Start-up report. Customer, model and technician are filled in.'],
         ['📊 LG monthly report', 'More → LG Monthly Report → choose the month → Print / PDF.'],
+        ['✅ To do (Home)', 'Home shows what needs attention: old jobs to update, overdue invoices, quotations to follow up, customers to book for cleaning.'],
+        ['📷 Job photos', 'Open a job → Add photos. They are saved in Google Drive, one folder per job.'],
         ['❓ Mistake?', 'Open the item again and fix it, or record a correction (e.g. an IN to cancel a wrong OUT). Nothing is deleted.']]
         .map(x => `<div class="item" style="align-items:flex-start"><span class="grow"><div class="t">${x[0]}</div><div class="s" style="white-space:normal">${x[1]}</div></span></div>`).join('')}
     </div></div>`;
