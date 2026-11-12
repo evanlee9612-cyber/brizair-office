@@ -393,3 +393,15 @@ body[data-route=ask] .fab { display: none; }
 body[data-route=quote] .fab, body[data-route=ask] .fab { display: none; }
 .savebar { position: sticky; bottom: calc(var(--tabs-h) + env(safe-area-inset-bottom)); z-index: 5; background: rgba(243,245,249,.96); padding: 10px 0; margin: 0 -2px; }
 @media (min-width: 900px) { .savebar { bottom: 0; } }
+.owner { background: linear-gradient(135deg, #0b4fd6, #0a3aa3); color: #fff; }
+.owner h2 { color: #fff; } .owner .muted { color: rgba(255,255,255,.75); }
+.osum { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 14px; }
+@media (min-width: 900px) { .osum { grid-template-columns: repeat(3, 1fr); } }
+.osum span { display: block; font-size: 12.5px; opacity: .8; font-weight: 600; }
+.osum b { font-size: 17px; }
+a.btn { text-decoration: none; color: inherit; }
+.item > svg { width: 20px; height: 20px; flex-shrink: 0; color: var(--ink-3); }
+.qi svg { width: 22px; height: 22px; }
+.grid2 > *, .card, .stats > * { min-width: 0; }
+html, body { overflow-x: hidden; }
+.f2 > .f, .f input, .f select, .f textarea { min-width: 0; max-width: 100%; }

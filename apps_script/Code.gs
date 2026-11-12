@@ -50,7 +50,7 @@ function doPost(e) {
 /** which data sections each save changes (sent back right away) */
 var CHANGES = {addJob: ['schedule', 'log'], updateJob: ['schedule', 'log'], stockMove: ['stock', 'log'], payment: ['money', 'log'],
   newReceivable: ['money', 'log'], cleaningDone: ['customers', 'log'], addInstall: ['customers', 'log'], saveQuote: ['docs', 'log'],
-  quoteStatus: ['docs', 'log'], kNote: ['ask', 'log'], kUpload: ['ask', 'log'], kHide: ['ask', 'log'], askRate: ['ask', 'log']};
+  quoteStatus: ['docs', 'log'], jobPhoto: ['schedule', 'log'], kNote: ['ask', 'log'], kUpload: ['ask', 'log'], kHide: ['ask', 'log'], askRate: ['ask', 'log']};
 
 var ACTIONS = {
   boot: boot_,
@@ -67,6 +67,7 @@ var ACTIONS = {
   ask: ask_,
   askGet: askGet_,
   askRate: askRate_,
+  jobPhoto: jobPhoto_,
   kNote: kNote_,
   kUpload: kUpload_,
   kHide: kHide_
@@ -295,7 +296,7 @@ function boot_(req, me, parts) {
       return {r: i + 1, date: date, time: timeStr_(r[col_(T, 'time')]), job: s_(r[col_(T, 'job')]), customer: cust,
         location: s_(r[col_(T, 'location')]), units: s_(r[col_(T, 'units / model')]), tech: s_(r[col_(T, 'technician')]),
         status: s_(r[col_(T, 'status')]) || 'Scheduled', notes: s_(r[col_(T, 'notes')]), by: s_(r[colOpt_(T, 'added by')]),
-        id: s_(r[colOpt_(T, 'bot record id')])};
+        id: s_(r[colOpt_(T, 'bot record id')]), photos: s_(r[colOpt_(T, 'photos')])};
     });
     tm.schedule = Date.now() - t0;
   }
@@ -852,4 +853,43 @@ function bumpKVer_() {
   var v = String(Date.now());
   PropertiesService.getScriptProperties().setProperty('K_VER', v);
   CacheService.getScriptCache().put('K_VER', v, 21600);
+}
+
+// ───────────────────────── job photos (Google Drive, one folder per job) ─────────────────────────
+function jobPhoto_(req, me) {
+  if (!req.b64) throw bad_('No photo');
+  var bytes = Utilities.base64Decode(req.b64);
+  if (bytes.length > 12 * 1024 * 1024) throw bad_('Photo is too big');
+  var r = +req.r;
+  return withLock_(function () {
+    var T = table_('SCHEDULE');
+    if (!(r >= 2 && r <= T.vals.length)) throw bad_('Job not found. Please refresh.');
+    var cur = T.vals[r - 1], idc = colOpt_(T, 'bot record id');
+    var same = (req.id && idc >= 0) ? s_(cur[idc]) === req.id : s_(cur[col_(T, 'customer')]) === String(req.customer || '');
+    if (!same) throw bad_('This job was changed by someone else. Please refresh.');
+    var pc = colOpt_(T, 'photos');
+    if (pc < 0) {  // first photo ever: add a "Photos" column at the end of SCHEDULE
+      pc = T.lc;
+      T.sh.getRange(1, pc + 1).setValue('Photos (사진)').setFontWeight('bold');
+    }
+    var link = pc < cur.length ? s_(cur[pc]) : '';
+    var folder = null, m = link.match(/folders\/([\w-]+)/);
+    if (m) { try { folder = DriveApp.getFolderById(m[1]); } catch (x) { folder = null; } }
+    if (!folder) {
+      var root = photoRoot_();
+      folder = root.createFolder((d_(cur[col_(T, 'date')]) || 'no-date') + ' ' + s_(cur[col_(T, 'customer')]).slice(0, 60) + ' (' + s_(cur[col_(T, 'job')]) + ')');
+      T.sh.getRange(r, pc + 1).setValue(folder.getUrl());
+    }
+    var name = Utilities.formatDate(new Date(), TZ, 'yyyyMMdd-HHmmss') + '-' + me.name.replace(/\W+/g, '') + '.jpg';
+    folder.createFile(Utilities.newBlob(bytes, req.mime || 'image/jpeg', name));
+    if (req.last) done_(me, 'Job photos', s_(cur[col_(T, 'customer')]) + ' (' + d_(cur[col_(T, 'date')]) + ') · ' + (req.count || 1) + ' photo(s)', '📷');
+    return {ok: true, folder: folder.getUrl()};
+  });
+}
+function photoRoot_() {
+  var p = PropertiesService.getScriptProperties(), id = p.getProperty('PHOTO_FOLDER');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (x) {} }
+  var f = DriveApp.getFolderById(MAIN_FOLDER_ID).createFolder('Job photos (from website)');
+  p.setProperty('PHOTO_FOLDER', f.getId());
+  return f;
 }
