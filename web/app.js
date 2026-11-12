@@ -42,6 +42,10 @@
     edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
     check: '<path d="m5 12 5 5 9-10"/>',
     phone: '<path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2"/>',
+    chat: '<path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8 10h8M8 13h5"/>',
+    book: '<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H20v15H5.5A1.5 1.5 0 0 0 4 19.5z"/><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H20v-3"/>',
+    upload: '<path d="M12 16V4m0 0-4 4m4-4 4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
+    send: '<path d="M4 12 20 4l-6 16-3-7z"/>',
     refresh: '<path d="M20 11a8 8 0 0 0-14.9-3.9L3 9M4 13a8 8 0 0 0 14.9 3.9L21 15"/><path d="M3 4v5h5M21 20v-5h-5"/>'
   };
   const ic = (n, w) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w || 2}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
@@ -168,8 +172,8 @@
 
   // ───────── shell ─────────
   const NAV = [
-    ['home', 'Home', 'home'], ['schedule', 'Schedule', 'cal'], ['stock', 'Stock', 'box'], ['customers', 'Customers', 'users'],
-    ['money', 'Money', 'peso'], ['quotes', 'Quotes & Forms', 'doc'], ['report', 'LG Monthly Report', 'chart'], ['activity', 'Activity', 'log']
+    ['home', 'Home', 'home'], ['ask', 'Ask GPT', 'chat'], ['schedule', 'Schedule', 'cal'], ['stock', 'Stock', 'box'], ['customers', 'Customers', 'users'],
+    ['money', 'Money', 'peso'], ['materials', 'Materials for AI', 'book'], ['quotes', 'Quotes & Forms', 'doc'], ['report', 'LG Monthly Report', 'chart'], ['activity', 'Activity', 'log']
   ];
   function shell() {
     document.body.innerHTML = `
@@ -193,7 +197,7 @@
       </div>
       <button class="fab" data-act="new" aria-label="New">${ic('plus', 2.4)}</button>
       <nav class="tabs">
-        ${[['home', 'Home', 'home'], ['schedule', 'Schedule', 'cal'], ['stock', 'Stock', 'box'], ['customers', 'Customers', 'users'], ['more', 'More', 'more']]
+        ${[['home', 'Home', 'home'], ['schedule', 'Schedule', 'cal'], ['ask', 'Ask GPT', 'chat'], ['stock', 'Stock', 'box'], ['customers', 'Customers', 'users']]
           .map(n => `<button data-go="${n[0]}">${ic(n[2])}<span>${n[1]}</span></button>`).join('')}
       </nav>
       <div id="print"></div>`;
@@ -209,7 +213,9 @@
     const [name, ...rest] = h.split('/');
     const arg = rest.join('/');
     S.route = name;
-    const tabFor = {money: 'more', quotes: 'more', report: 'more', activity: 'more', help: 'more', quote: 'more', cust: 'customers'}[name] || name;
+    document.body.dataset.route = name;
+    const tabFor = {cust: 'customers', materials: 'ask'}[name] || name;
+    $$('.me').forEach(b => b.classList.toggle('on', ['more', 'money', 'quotes', 'quote', 'report', 'activity', 'help'].includes(name)));
     $$('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.go === tabFor));
     $$('.side button[data-go]').forEach(b => b.classList.toggle('on', b.dataset.go === ({cust: 'customers', quote: 'quotes'}[name] || name)));
     const main = $('#main');
@@ -271,6 +277,7 @@
     return `
       <h1>${greet()}, ${esc(name)}</h1>
       <p class="sub">${esc(fmtLong(t))}</p>
+      <button class="askbar" data-go="ask">${ic('chat')}<span class="grow">Ask GPT anything — stock, prices, customers, schedule…</span>${ic('right')}</button>
       <div class="quick">
         <button data-act="newJob"><span class="qi c-blue">${ic('cal')}</span>New job</button>
         <button data-act="move" data-kind="unit"><span class="qi c-green">${ic('box')}</span>Unit in / out</button>
@@ -648,12 +655,86 @@
 
   VIEWS.more = () => `<h1>More</h1><p class="sub">Logged in as <b>${esc(S.me && S.me.name)}</b></p>
     <div class="card"><div class="list">
-      ${[['money', 'Money — unpaid & payments', 'peso', 'c-amber'], ['quotes', 'Quotes & Forms', 'doc', 'c-red'], ['report', 'LG Monthly Report', 'chart', 'c-green'], ['activity', 'Activity', 'log', 'c-blue'], ['help', 'Help', 'help', 'c-violet']]
+      ${[['ask', 'Ask GPT', 'chat', 'c-blue'], ['materials', 'Materials for AI (upload)', 'book', 'c-violet'], ['money', 'Money — unpaid & payments', 'peso', 'c-amber'], ['quotes', 'Quotes & Forms', 'doc', 'c-red'], ['report', 'LG Monthly Report', 'chart', 'c-green'], ['activity', 'Activity', 'log', 'c-blue'], ['help', 'Help', 'help', 'c-violet']]
         .map(x => `<button class="item" data-go="${x[0]}"><span class="qi ${x[3]}" style="width:38px;height:38px">${ic(x[2])}</span><span class="grow t">${x[1]}</span>${ic('right')}</button>`).join('')}
       <button class="item" data-act="openSheet"><span class="qi c-teal" style="width:38px;height:38px">${ic('sheet')}</span><span class="grow t">Open Google Sheet</span>${ic('right')}</button>
       <button class="item" data-act="logout"><span class="qi" style="width:38px;height:38px;background:var(--bg)">${ic('out')}</span><span class="grow t">Log out</span></button>
     </div></div>
     <p class="muted small mt">Add this site to your phone's Home Screen: Chrome menu ⋮ → “Add to Home screen” (iPhone: Share → “Add to Home Screen”).</p>`;
+
+  // ask GPT
+  function askItem(a) {
+    const st = a.status || '';
+    const ans = st === 'answered' ? `<div class="bub ai">${fmtAnswer(a.a)}</div>`
+      : st === 'error' ? `<div class="bub ai err">Sorry, the AI could not answer this one. Please ask again in a different way, or ask Sir Kim.</div>`
+      : `<div class="bub ai wait"><span class="dots3"><i></i><i></i><i></i></span> ${st.indexOf('thinking') === 0 ? 'GPT is reading the sheet…' : D().aiOnline === false ? 'Waiting — Sir Kim\'s PC is offline. It will answer when the PC is on.' : 'Sent. GPT will answer in about 20–60 seconds…'}</div>`;
+    return `<div class="qa"><div class="meta">${esc(a.who)} · ${esc(String(a.time || '').slice(5))}</div><div class="bub me">${esc(a.q)}</div>${ans}</div>`;
+  }
+  function fmtAnswer(t) {
+    return esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/^#{1,4}\s*(.+)$/gm, '<b>$1</b>').replace(/^[-*]\s+/gm, '• ').replace(/\n/g, '<br>');
+  }
+  VIEWS.ask = () => {
+    const list = (D().ask || []).slice(-40);
+    const on = D().aiOnline;
+    return `<div class="row between wrap"><h1 style="margin:0">Ask GPT</h1><button class="btn sm" data-go="materials">${ic('book')} Materials for AI</button></div>
+      <p class="sub" style="margin-top:6px">GPT reads the whole office sheet and the uploaded materials, then answers. English, Tagalog or Korean is OK.
+        <br><span class="pill ${on ? 'p-Done' : 'p-Moved'}">${on ? '● GPT online' : '● GPT offline — Sir Kim\'s PC is off'}</span></p>
+      <div id="qaList" class="qalist">${list.map(askItem).join('') || `<div class="empty">No questions yet. Try:<br>“How many HSN12 units do we have?”<br>“How much does Kodec still owe?”<br>“When is the next cleaning for Café Dia?”</div>`}</div>
+      <form id="askForm" class="askform"><textarea id="askQ" rows="1" placeholder="Type your question…"></textarea><button class="btn primary" aria-label="Send">${ic('send')}</button></form>`;
+  };
+  VIEWS.ask.after = () => {
+    const box = $('#qaList'); if (box) window.scrollTo(0, document.body.scrollHeight);
+    const ta = $('#askQ');
+    ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'; });
+    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 900) { e.preventDefault(); $('#askForm').requestSubmit(); } });
+    $('#askForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const q = ta.value.trim(); if (!q) return;
+      ta.value = ''; ta.style.height = 'auto';
+      try {
+        const r = await call('ask', {q});
+        const item = {id: r.id, who: S.me.name, time: new Date().toLocaleString('sv-SE', {timeZone: 'Asia/Manila'}).slice(0, 16), q, status: 'waiting', a: ''};
+        (S.D.ask = S.D.ask || []).push(item);
+        render(); pollAsk();
+      } catch (err) { toast(err.message, true); ta.value = q; }
+    });
+    pollAsk();
+  };
+  function pollAsk() {
+    clearTimeout(S.askTimer);
+    const pend = (D().ask || []).filter(a => a.status !== 'answered' && a.status !== 'error').map(a => a.id);
+    if (!pend.length) return;
+    S.askTimer = setTimeout(async () => {
+      try {
+        const r = await call('askGet', {ids: pend});
+        S.D.aiOnline = r.aiOnline;
+        let changed = false;
+        r.items.forEach(it => { const a = S.D.ask.find(x => x.id === it.id); if (a && (a.status !== it.status || a.a !== it.a)) { Object.assign(a, it); changed = true; } });
+        if (changed && S.route === 'ask') { const ae = document.activeElement; const typing = ae && ae.id === 'askQ' && ae.value; if (!typing) render(); else $('#qaList').innerHTML = S.D.ask.slice(-40).map(askItem).join(''); }
+        if (changed && S.route !== 'ask' && r.items.some(i => i.status === 'answered')) toast('GPT answered your question ✓');
+      } catch (e) { }
+      pollAsk();
+    }, 3500);
+  }
+
+  // materials
+  VIEWS.materials = () => {
+    const ks = D().know || [];
+    return `<button class="btn ghost sm" data-go="ask" style="padding-left:0">${ic('left')} Ask GPT</button>
+      <div class="row between wrap"><h1 style="margin:0">Materials for AI</h1></div>
+      <p class="sub" style="margin-top:6px">Teach GPT. Upload price lists, LG brochures, rules, FAQ, sample quotations, photos of documents. GPT reads them before answering.</p>
+      <div class="quick" style="grid-template-columns:repeat(2,1fr)">
+        <button data-act="kUpload"><span class="qi c-blue">${ic('upload')}</span>Upload a file or photo</button>
+        <button data-act="kNote"><span class="qi c-violet">${ic('edit')}</span>Write a rule / answer</button>
+      </div>
+      <div class="card"><div class="card-h"><h2>Uploaded (${ks.length})</h2></div><div class="list">
+        ${ks.map(k => `<div class="item" style="align-items:flex-start"><span class="qi ${k.type === 'File' ? 'c-blue' : 'c-violet'}" style="width:36px;height:36px">${ic(k.type === 'File' ? 'doc' : 'edit')}</span>
+          <span class="grow"><div class="t">${esc(k.title)}</div><div class="s">${esc([fmtD(k.date, {year: 'numeric'}), k.who].filter(Boolean).join(' · '))}</div>
+          <div class="s" style="white-space:normal;max-height:3.8em;overflow:hidden">${esc(k.text)}</div>
+          ${k.url ? `<a class="small" href="${esc(k.url)}" target="_blank" rel="noopener">Open file</a>` : ''}</span>
+          <button class="iconbtn" data-act="kHide" data-id="${esc(k.id)}" aria-label="Remove">${ic('x')}</button></div>`).join('') || '<div class="empty">Nothing uploaded yet</div>'}</div></div>
+      <p class="muted small">Tip: one topic per upload, with a clear title (e.g. “LG price list Nov 2026”). Wrong or old? Tap ✕ to remove it.</p>`;
+  };
 
   VIEWS.help = () => `<h1>How to use</h1><p class="sub">Everything is saved to the BRIZAIR Office Sheet. Sir Kim gets a Telegram alert for every change.</p>
     <div class="card"><div class="list">
@@ -1078,6 +1159,36 @@
       closeSheet(); printHtml(el.dataset.f === 'startup' ? startupDoc(j) : serviceDoc(j));
     },
     printReport: () => printHtml(reportDoc(), true),
+    kNote: () => openSheet('Write a rule / answer', `<form id="fk">${field('Title', '<input name="title" placeholder="e.g. Cleaning price, Warranty rule">')}
+        ${field('What should GPT know?', '<textarea name="text" style="min-height:180px" placeholder="e.g. Cleaning is ₱1,500 per split-type unit. Floor stand ₱3,000. Free check-up within 1 year of installation."></textarea>')}</form>`,
+      `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="kNoteSave">Save</button>`),
+    kNoteSave: async el => {
+      const f = formData('#fk'); if (!f.text) return toast('Write something first', true);
+      el.disabled = true;
+      try { await save('kNote', f, 'Saved ✓ GPT will use it'); } catch (e) { el.disabled = false; }
+    },
+    kUpload: () => openSheet('Upload for GPT', `<form id="fku">
+        <div class="f"><label>File or photo *</label><input type="file" name="file" id="ku_file" accept="image/*,.pdf,.xlsx,.xls,.docx,.doc,.csv,.txt,.pptx"><div class="hint">PDF, Excel, Word, photo of a document (max 15 MB)</div></div>
+        ${field('Title', '<input name="title" placeholder="e.g. LG price list Nov 2026">')}
+        ${field('Note for GPT (optional)', '<input name="note" placeholder="e.g. Use this for quotations from Nov 2026">')}</form>`,
+      `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="kUploadSave">Upload</button>`),
+    kUploadSave: async el => {
+      const fi = $('#ku_file'), file = fi && fi.files[0];
+      if (!file) return toast('Choose a file first', true);
+      if (file.size > 15 * 1024 * 1024) return toast('File is too big (max 15 MB)', true);
+      const f = formData('#fku');
+      el.disabled = true; el.textContent = 'Uploading… (GPT is reading the file)';
+      try {
+        const b64 = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(file); });
+        const r = await call('kUpload', {b64, name: file.name, mime: file.type, title: f.title || file.name, note: f.note});
+        toast(r.chars ? `Uploaded ✓ GPT can read ${r.chars.toLocaleString()} characters` : 'Uploaded ✓ (no text found — add a note so GPT knows what it is)');
+        closeSheet(); refresh(true);
+      } catch (e) { toast(e.message, true); el.disabled = false; el.textContent = 'Upload'; }
+    },
+    kHide: async el => {
+      if (!confirmBox('Remove this from GPT\'s materials?')) return;
+      try { await save('kHide', {id: el.dataset.id}, 'Removed'); } catch (e) { }
+    },
     repKind: el => { S.rep.kind = el.dataset.k; render(); }
   };
   function confirmBox(msg) { return window.confirm(msg); }

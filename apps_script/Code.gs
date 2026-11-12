@@ -9,6 +9,8 @@
  *   First time only: POST {a:'setup', users:[{name, role, pin}]} (works only while no users exist).
  *   To change PINs: run resetUsers() in the editor, then setup again.
  * Optional Telegram alert: Script Properties TG_TOKEN + TG_CHAT → every change is sent there.
+ * AI answers: questions go to tab ASK. Sir Kim's PC (ask_relay.py + Codex/ChatGPT) picks them up with
+ *   RELAY_KEY (Script Property, set once by Evan) and writes the answer back. Materials: tab KNOWLEDGE + Drive folder.
  */
 var VERSION = '1.0';
 var SHEET_ID = '1jahKP1N3VVmiBqSXlr3xbmJxORVAWFVQNtxMLyqbCKE';
@@ -17,6 +19,7 @@ var SESSION_DAYS = 90;
 var JOBS = ['Install', 'Service (AS)', 'Cleaning', 'Survey', 'Delivery', 'Pull-out', 'Meeting', 'Other'];
 var STATUSES = ['Scheduled', 'Confirmed', 'Done', 'Moved', 'Cancelled'];
 var METHODS = ['Cash', 'Bank', 'GCash', 'Check', 'Other'];
+var MAIN_FOLDER_ID = '1mzJaWt2sPB2yck9vy4AtkVk0A8NKGzJH';  // BRIZAIR Office (Bot + Sheets)
 
 // ───────────────────────── entry points ─────────────────────────
 function doGet() {
@@ -29,6 +32,7 @@ function doPost(e) {
   try {
     if (req.a === 'setup') return out(setup_(req));
     if (req.a === 'login') return out(login_(req));
+    if (String(req.a).indexOf('relay') === 0) return out(relay_(req));
     var me = auth_(req.t);
     if (!me) return out({ok: false, error: 'login', msg: 'Please log in again.'});
     var f = ACTIONS[req.a];
@@ -51,7 +55,12 @@ var ACTIONS = {
   cleaningDone: cleaningDone_,
   addInstall: addInstall_,
   saveQuote: saveQuote_,
-  quoteStatus: quoteStatus_
+  quoteStatus: quoteStatus_,
+  ask: ask_,
+  askGet: askGet_,
+  kNote: kNote_,
+  kUpload: kUpload_,
+  kHide: kHide_
 };
 
 function out(o) {
@@ -126,9 +135,11 @@ function resetUsers() {
   Object.keys(props.getProperties()).forEach(function (k) { if (k === 'USERS' || k.indexOf('S_') === 0) props.deleteProperty(k); });
 }
 
-/** Run once in the editor to approve access (sheet + Telegram alerts). */
+/** Run once in the editor to approve access (sheet + Drive uploads + Telegram alerts). */
 function authorize() {
   SpreadsheetApp.openById(SHEET_ID).getName();
+  DriveApp.getFolderById(MAIN_FOLDER_ID).getName();
+  Drive.Files.list({pageSize: 1});
   UrlFetchApp.fetch('https://www.google.com', {muteHttpExceptions: true});
   Logger.log('OK');
 }
@@ -308,6 +319,11 @@ function boot_(req, me) {
         status: s_(r[5]), by: s_(r[6]), updated: s_(r[7]), data: data});
     });
   }
+  out.ask = askRows_(40);
+  out.know = knowRows_(false).map(function (k) { k.text = String(k.text || '').slice(0, 280); return k; });
+  var seen = +(PropertiesService.getScriptProperties().getProperty('RELAY_SEEN') || 0);
+  out.aiOnline = seen > 0 && Date.now() - seen < 3 * 60000;
+  out.aiSeen = seen ? new Date(seen).toISOString() : '';
   var lg = ss_().getSheetByName('APP LOG');
   out.log = [];
   if (lg && lg.getLastRow() > 1) {
@@ -554,4 +570,187 @@ function quoteStatus_(req, me) {
     done_(me, 'Quotation ' + req.status, req.no + ' · ' + sh.getRange(k + 2, 3).getValue(), req.status === 'Accepted' ? '🎉' : '📄');
     return {ok: true};
   });
+}
+
+// ───────────────────────── AI questions (answered by Sir Kim's PC) ─────────────────────────
+var ASK_HEAD = ['ID', 'Time (시간)', 'Who (누가)', 'Question (질문)', 'Status (상태)', 'Answer (답)', 'Answered (답한 시간)'];
+function askSheet_() {
+  var ss = ss_(), sh = ss.getSheetByName('ASK');
+  if (!sh) {
+    sh = ss.insertSheet('ASK');
+    sh.getRange(1, 1, 1, ASK_HEAD.length).setValues([ASK_HEAD]).setFontWeight('bold');
+    sh.setFrozenRows(1); sh.setColumnWidth(4, 360); sh.setColumnWidth(6, 520);
+  }
+  return sh;
+}
+function askRows_(n, ids) {
+  var sh = askSheet_(), last = sh.getLastRow();
+  if (last < 2) return [];
+  var from = ids ? 2 : Math.max(2, last - n + 1);
+  return sh.getRange(from, 1, last - from + 1, 7).getValues()
+    .filter(function (r) { return r[0] && (!ids || ids.indexOf(String(r[0])) >= 0); })
+    .map(function (r) {
+      return {id: String(r[0]), time: r[1] instanceof Date ? Utilities.formatDate(r[1], TZ, 'yyyy-MM-dd HH:mm') : s_(r[1]),
+        who: s_(r[2]), q: s_(r[3]), status: s_(r[4]), a: s_(r[5])};
+    });
+}
+function ask_(req, me) {
+  var q = String(req.q || '').trim();
+  if (q.length < 2) throw new Error('Type your question');
+  return withLock_(function () {
+    var sh = askSheet_(), id = 'A' + Utilities.formatDate(new Date(), TZ, 'yyMMddHHmmss') + Math.floor(Math.random() * 90 + 10);
+    sh.appendRow([id, new Date(), me.name, clip_(q, 2000), 'waiting', '', '']);
+    return {ok: true, id: id};
+  });
+}
+function askGet_(req, me) {
+  var ids = (req.ids || []).map(String).slice(0, 20);
+  var seen = +(PropertiesService.getScriptProperties().getProperty('RELAY_SEEN') || 0);
+  return {ok: true, items: askRows_(0, ids), aiOnline: seen > 0 && Date.now() - seen < 3 * 60000};
+}
+
+// ───────────────────────── materials (knowledge for the AI) ─────────────────────────
+var K_HEAD = ['ID', 'Date (날짜)', 'Who (누가)', 'Title (제목)', 'Type (종류)', 'Text for AI (AI가 읽는 글)', 'File (파일)', 'Status (상태)'];
+function kSheet_() {
+  var ss = ss_(), sh = ss.getSheetByName('KNOWLEDGE');
+  if (!sh) {
+    sh = ss.insertSheet('KNOWLEDGE');
+    sh.getRange(1, 1, 1, K_HEAD.length).setValues([K_HEAD]).setFontWeight('bold');
+    sh.setFrozenRows(1); sh.setColumnWidth(4, 240); sh.setColumnWidth(6, 520); sh.setColumnWidth(7, 220);
+  }
+  return sh;
+}
+function knowRows_(withHidden) {
+  var sh = kSheet_(), last = sh.getLastRow();
+  if (last < 2) return [];
+  return sh.getRange(2, 1, last - 1, 8).getValues().filter(function (r) { return r[0] && (withHidden || r[7] !== 'hidden'); })
+    .map(function (r) {
+      return {id: String(r[0]), date: d_(r[1]), who: s_(r[2]), title: s_(r[3]), type: s_(r[4]), text: String(r[5] || ''), url: s_(r[6]), status: s_(r[7])};
+    }).reverse();
+}
+function kFolder_() {
+  var p = PropertiesService.getScriptProperties(), id = p.getProperty('K_FOLDER');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (x) {} }
+  var f = DriveApp.getFolderById(MAIN_FOLDER_ID).createFolder('Materials for AI (uploads)');
+  p.setProperty('K_FOLDER', f.getId());
+  return f;
+}
+function kAdd_(me, title, type, text, url) {
+  var sh = kSheet_(), id = 'K' + Utilities.formatDate(new Date(), TZ, 'yyMMddHHmmss') + Math.floor(Math.random() * 90 + 10);
+  sh.appendRow([id, new Date(), me.name, clip_(title, 200), type, String(text || '').slice(0, 45000), url || '', 'active']);
+  PropertiesService.getScriptProperties().setProperty('K_VER', String(Date.now()));
+  return id;
+}
+function kNote_(req, me) {
+  var t = String(req.text || '').trim();
+  if (t.length < 3) throw new Error('Write something first');
+  var id = kAdd_(me, req.title || t.slice(0, 60), 'Note', t, '');
+  done_(me, 'Material added', (req.title || t.slice(0, 60)), '📚');
+  return {ok: true, id: id};
+}
+function kUpload_(req, me) {
+  if (!req.b64 || !req.name) throw new Error('No file');
+  var bytes = Utilities.base64Decode(req.b64);
+  if (bytes.length > 15 * 1024 * 1024) throw new Error('File is too big (max 15 MB)');
+  var mime = String(req.mime || 'application/octet-stream');
+  var blob = Utilities.newBlob(bytes, mime, String(req.name).slice(0, 120));
+  var file = kFolder_().createFile(blob);
+  var text = '', note = String(req.note || '').trim();
+  try { text = extractText_(blob, mime, file.getName()); } catch (x) { text = ''; }
+  var body = (note ? 'Note from ' + me.name + ': ' + note + '\n\n' : '') + (text || '(no readable text found — the AI sees only the title and note)');
+  var id = kAdd_(me, req.title || file.getName(), 'File', body, file.getUrl());
+  done_(me, 'Material uploaded', (req.title || file.getName()) + (text ? ' · ' + text.length + ' chars read' : ' · no text'), '📚');
+  return {ok: true, id: id, chars: text.length};
+}
+function extractText_(blob, mime, name) {
+  if (/^text\/|csv|json/.test(mime) || /\.(txt|csv|md)$/i.test(name)) return blob.getDataAsString('UTF-8');
+  var target = null;
+  if (/spreadsheet|excel/.test(mime) || /\.(xlsx|xls)$/i.test(name)) target = 'application/vnd.google-apps.spreadsheet';
+  else if (/pdf|image\/|word|document|presentation|powerpoint/.test(mime) || /\.(pdf|docx?|pptx?|jpe?g|png|heic)$/i.test(name)) target = 'application/vnd.google-apps.document';
+  if (!target) return '';
+  var tmp = Drive.Files.create({name: 'tmp-ocr-' + name, mimeType: target, parents: [kFolder_().getId()]}, blob, {ocrLanguage: 'en'});
+  try {
+    if (target === 'application/vnd.google-apps.spreadsheet') {
+      var ss = SpreadsheetApp.openById(tmp.id), out = [];
+      ss.getSheets().forEach(function (sh) {
+        var v = sh.getDataRange().getDisplayValues();
+        out.push('## ' + sh.getName());
+        v.forEach(function (r) { var line = r.join(' | ').replace(/( \| )+$/, ''); if (line.replace(/[ |]/g, '')) out.push(line); });
+      });
+      return out.join('\n');
+    }
+    return DocumentApp.openById(tmp.id).getBody().getText();
+  } finally {
+    try { DriveApp.getFileById(tmp.id).setTrashed(true); } catch (x) {}
+  }
+}
+function kHide_(req, me) {
+  return withLock_(function () {
+    var sh = kSheet_(), last = sh.getLastRow();
+    var ids = last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
+    var k = ids.indexOf(String(req.id));
+    if (k < 0) throw new Error('Not found');
+    sh.getRange(k + 2, 8).setValue('hidden');
+    PropertiesService.getScriptProperties().setProperty('K_VER', String(Date.now()));
+    done_(me, 'Material removed', sh.getRange(k + 2, 4).getValue(), '🗑️');
+    return {ok: true};
+  });
+}
+
+// ───────────────────────── relay (Sir Kim's PC) ─────────────────────────
+function relay_(req) {
+  var p = PropertiesService.getScriptProperties(), key = p.getProperty('RELAY_KEY');
+  if (req.a === 'relaySetKey') {  // once only, Evan sets it
+    if (key) return {ok: false, error: 'already set'};
+    if (!req.key || String(req.key).length < 32) return {ok: false, error: 'short'};
+    p.setProperty('RELAY_KEY', String(req.key));
+    return {ok: true};
+  }
+  if (!key || req.key !== key) return {ok: false, error: 'bad key'};
+  p.setProperty('RELAY_SEEN', String(Date.now()));
+  if (req.a === 'relayPoll') {
+    return withLock_(function () {
+      var sh = askSheet_(), last = sh.getLastRow(), outQ = [];
+      if (last >= 2) {
+        var v = sh.getRange(2, 1, last - 1, 7).getValues(), now = Date.now();
+        for (var i = 0; i < v.length && outQ.length < 3; i++) {
+          var st = String(v[i][4]);
+          var stale = /^thinking@(\d+)$/.test(st) && now - (+st.split('@')[1]) > 8 * 60000;
+          if (st === 'waiting' || stale) {
+            sh.getRange(i + 2, 5).setValue('thinking@' + now);
+            outQ.push({id: String(v[i][0]), who: s_(v[i][2]), q: s_(v[i][3]), time: v[i][1] instanceof Date ? Utilities.formatDate(v[i][1], TZ, 'yyyy-MM-dd HH:mm') : ''});
+          }
+        }
+      }
+      return {ok: true, questions: outQ, dataVer: dataVer_(), now: Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm (EEE)')};
+    });
+  }
+  if (req.a === 'relayAnswer') {
+    return withLock_(function () {
+      var sh = askSheet_(), last = sh.getLastRow();
+      var ids = last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
+      var k = ids.indexOf(String(req.id));
+      if (k < 0) return {ok: false, error: 'not found'};
+      sh.getRange(k + 2, 5, 1, 3).setValues([[req.error ? 'error' : 'answered', String(req.answer || '').slice(0, 20000), new Date()]]);
+      return {ok: true};
+    });
+  }
+  if (req.a === 'relayExport') {
+    var ss = ss_(), tabs = {};
+    ss.getSheets().forEach(function (sh) {
+      var n = sh.getName();
+      if (/^(ASK|BOT AUDIT|APP LOG)$/.test(n)) return;
+      var v = sh.getDataRange().getDisplayValues(), last = v.length;
+      while (last > 0 && v[last - 1].join('') === '') last--;
+      tabs[n] = v.slice(0, last);
+    });
+    var ask = askRows_(60).filter(function (r) { return r.status === 'answered'; });
+    return {ok: true, dataVer: dataVer_(), tabs: tabs, knowledge: knowRows_(false), recentQA: ask,
+      at: Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm')};
+  }
+  return {ok: false, error: 'unknown'};
+}
+function dataVer_() {
+  // changes whenever materials change; sheet edits are picked up by the PC every 10 minutes anyway
+  return PropertiesService.getScriptProperties().getProperty('K_VER') || '0';
 }
