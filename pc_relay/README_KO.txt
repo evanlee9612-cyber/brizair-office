@@ -11,7 +11,7 @@ BRIZAIR 사이트 "Ask GPT" 연결 프로그램 (의찬 형님 컴퓨터용)
 1) 이 site_ai 폴더를 C:\staff-bot 안에 넣기 → C:\staff-bot\site_ai\
    (열쇠는 기존 C:\staff-bot\sheet.key 를 같이 씁니다. 따로 넣을 것 없음)
 2) install_site_ai.bat 더블클릭 → "예"(관리자 허용) → 초록색 OK 나오면 끝
-3) 사이트에서 Ask GPT 에 아무 질문 → 20~60초 뒤 답이 오면 성공
+3) 사이트에서 Ask GPT 에 아무 질문 → 처음 한 번은 1~2분(자료 복사), 그 뒤로는 20~40초 안에 답이 오면 성공
 
 끄기: stop_site_ai.bat   /  다시 켜기: install_site_ai.bat
 기록: site_ai\logs\ask_relay.log  (문제 있으면 마지막 줄을 사진 찍어서 에반에게)
