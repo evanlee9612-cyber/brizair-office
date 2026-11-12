@@ -113,6 +113,7 @@
         text: a === 'kNote' ? b.text : (b.note ? 'Note: ' + b.note + '\n' : '') + '(demo: file text would appear here)', url: ''});
       log(me, 'Material added', b.title || b.name || ''); persist(); return {ok: true, chars: a === 'kUpload' ? 1200 : 0};
     }
+    if (a === 'jobPhoto') { const j = D.schedule.find(x => x.r === b.r); if (j) j.photos = 'https://drive.google.com/'; persist(); return {ok: true}; }
     if (a === 'askRate') { const x = D.ask.find(k => k.id === b.id); if (x) x.rating = b.good ? 'good' : 'bad: ' + (b.why || ''); if (!b.good && x) D.needs.unshift({id: x.id, time: x.time, who: me.name, q: x.q, rating: x.rating, missing: ''}); persist(); return {ok: true}; }
     if (a === 'kHide') { D.know = D.know.filter(k => k.id !== b.id); persist(); return {ok: true}; }
     if (a === 'addJob') {

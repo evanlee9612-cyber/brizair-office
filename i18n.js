@@ -143,6 +143,11 @@
     'More → LG Monthly Report → choose the month → Print / PDF.': '더보기 → LG 월별 보고 → 달 고르기 → 인쇄 / PDF.',
     'Open the item again and fix it, or record a correction (e.g. an IN to cancel a wrong OUT). Nothing is deleted.': '다시 열어서 고치거나 바로잡는 기록을 하세요 (예: 잘못 넣은 OUT을 IN으로 상쇄). 지워지는 건 없어요.',
     'Sorry, GPT could not answer this one. Please ask again in a different way, or ask Sir Kim.': '죄송해요, 이 질문은 GPT가 답하지 못했어요. 다르게 다시 묻거나 대표님께 물어보세요.',
+    'To do': '할 일', 'Owner summary': '대표님 요약', 'Jobs done today': '오늘 작업 완료', 'Paid today': '오늘 입금', 'Unpaid total': '미수금 합계',
+    'Quotations (7 days)': '견적 (7일)', 'GPT questions today': '오늘 GPT 질문', 'Changes today': '오늘 기록', '✓ Nothing waiting. Good job!': '✓ 밀린 일 없음. 잘하셨어요!',
+    'Photos': '사진', 'Add photos': '사진 올리기', 'Open photos': '사진 보기', 'Photos are saved in Google Drive, one folder per job.': '사진은 구글 드라이브에 일정별 폴더로 저장돼요.',
+    'Map': '지도', 'Book cleaning': '청소 예약', 'Uploading photo': '사진 올리는 중', 'photo(s) saved ✓': '장 저장했어요 ✓', 'Could not read this photo': '이 사진을 읽을 수 없어요',
+    'Questions GPT could not answer well': 'GPT가 잘 못 답한 질문',
     // more / help
     'Money — unpaid & payments': '돈 — 미수금·입금', 'Materials for AI (upload)': 'AI 자료 올리기', 'Language': '언어', 'How to use': '사용법',
     'No activity yet': '기록 없음', 'Latest changes made on this site (also saved in the sheet tab APP LOG).': '사이트에서 바꾼 최근 내용 (시트 APP LOG 탭에도 저장돼요).',
@@ -167,12 +172,13 @@
     [/^Could not load: (.+)$/, '불러오기 실패: $1'], [/^Choose the (model|part) from the list$/, '목록에서 골라 주세요'],
     [/^Stock is only (-?\d+)\. Record OUT (\d+) anyway\?$/, '재고가 $1개뿐이에요. 그래도 OUT $2개를 기록할까요?'],
     [/^Uploaded ✓ GPT can read (.+) characters$/, '올렸어요 ✓ GPT가 글자 $1자를 읽을 수 있어요'],
-    [/^Payment saved ✓ (.+)$/, '입금 저장 ✓ $1'], [/^Invoice saved, but could not add to Money: (.+)$/, '인보이스는 저장됐지만 돈에 추가 못 함: $1'],
+    [/^Payment saved ✓ (.+)$/, '입금 저장 ✓ $1'], [/^Update status: (.+)$/, '상태 정리: $1'], [/^Invoice overdue: (.+)$/, '기한 지난 인보이스: $1'],
+    [/^Follow up quotation: (.+)$/, '견적 후속 연락: $1'], [/^Book cleaning: (.+)$/, '청소 예약: $1'], [/^GPT needs information \((\d+)\)$/, 'GPT가 모르는 것 ($1)'], [/^Invoice saved, but could not add to Money: (.+)$/, '인보이스는 저장됐지만 돈에 추가 못 함: $1'],
     [/^(.+) → (Scheduled|Confirmed|Done|Moved|Cancelled)$/, '$1 → $2'], [/^Sent\. GPT will answer in about 20–60 seconds…$/, '보냈어요. GPT가 20~60초 안에 답해요…'],
     [/^GPT is reading the sheet…$/, 'GPT가 시트를 읽는 중…'], [/^Waiting — Sir Kim's PC is offline\. It will answer when the PC is on\.$/, '대기 중 — 의찬 형님 컴퓨터가 꺼져 있어요. 켜지면 답해요.'], [/^No jobs\. ?$/, '일정 없음. '], [/^\+ Add a job on this day$/, '+ 이날 일정 추가']
   ];
   const FRAG = [[/\bInstalled (?=[A-Z—])/g, '설치 '], [/ · Last cleaning /g, ' · 마지막 청소 '], [/ · Next$/g, ' · 다음'], [/^Next$/g, '다음'],
-    [/\bIndoor SN /g, '실내기 SN '], [/\bOutdoor SN /g, '실외기 SN '], [/ in stock now\b/g, ' 지금 재고'], [/\bstock (\d)/g, '재고 $1']];
+    [/\bIndoor SN /g, '실내기 SN '], [/\bOutdoor SN /g, '실외기 SN '], [/ in stock now\b/g, ' 지금 재고'], [/\bstock (\d)/g, '재고 $1'], [/ — still (Scheduled|Confirmed)$/g, ' — 아직 $1'], [/ · due /g, ' · 기한 '], [/ · sent /g, ' · 보냄 '], [/^due /g, '기한 ']];
 
   let lang = 'en';
   try { lang = localStorage.getItem('brz_lang') || ''; } catch (e) { lang = ''; }

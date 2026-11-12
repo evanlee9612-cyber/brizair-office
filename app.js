@@ -42,6 +42,8 @@
     edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
     check: '<path d="m5 12 5 5 9-10"/>',
     phone: '<path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2"/>',
+    camera: '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
+    pin: '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
     chat: '<path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8 10h8M8 13h5"/>',
     book: '<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H20v15H5.5A1.5 1.5 0 0 0 4 19.5z"/><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H20v-3"/>',
     upload: '<path d="M12 16V4m0 0-4 4m4-4 4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
@@ -267,13 +269,58 @@
     return (D().customers || []).filter(c => c.nc && c.nc >= from && c.nc <= until).sort((a, b) => a.nc.localeCompare(b.nc));
   }
 
+  // ───────── what needs attention (home) ─────────
+  function todos() {
+    const t = today(), out = [];
+    (D().schedule || []).filter(j => j.date && j.date < t && (j.status === 'Scheduled' || j.status === 'Confirmed'))
+      .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5)
+      .forEach(j => out.push({icon: 'cal', cls: 'c-amber', t: 'Update status: ' + j.customer, s: fmtD(j.date) + ' · ' + j.job + ' — still ' + j.status, act: `data-act="job" data-r="${j.r}"`}));
+    (D().quotes || []).filter(q => (q.type || 'quote') === 'invoice' && /Unpaid|Partially/.test(q.status) && q.data && q.data.due && q.data.due < t)
+      .forEach(q => out.push({icon: 'peso', cls: 'c-red', t: 'Invoice overdue: ' + q.customer, s: q.no + ' · due ' + fmtD(q.data.due) + ' · ' + peso(q.total), act: `data-go="quote/${esc(q.no)}"`}));
+    (D().quotes || []).filter(q => (q.type || 'quote') === 'quote' && q.status === 'Sent' && q.date && q.date <= addDays(t, -3))
+      .forEach(q => out.push({icon: 'doc', cls: 'c-blue', t: 'Follow up quotation: ' + q.customer, s: q.no + ' · sent ' + fmtD(q.date) + ' · ' + peso(q.total), act: `data-go="quote/${esc(q.no)}"`}));
+    const booked = new Set((D().schedule || []).filter(j => j.date >= t && /clean/i.test(j.job) && j.status !== 'Cancelled').map(j => lc(j.customer)));
+    const seen = new Set();
+    (D().customers || []).filter(c => c.c && c.nc && c.nc >= addDays(t, -14) && c.nc <= addDays(t, 14) && !booked.has(lc(c.c)))
+      .sort((a, b) => a.nc.localeCompare(b.nc)).forEach(c => {
+        if (seen.has(c.c) || seen.size >= 4) return; seen.add(c.c);
+        out.push({icon: 'spark', cls: 'c-violet', t: 'Book cleaning: ' + c.c, s: [c.l, c.m, 'due ' + fmtD(c.nc)].filter(Boolean).join(' · '), act: `data-act="bookClean" data-cust="${esc(c.c)}"`});
+      });
+    if (S.me && S.me.role === 'owner' && (D().needs || []).length)
+      out.push({icon: 'book', cls: 'c-teal', t: 'GPT needs information (' + D().needs.length + ')', s: 'Questions GPT could not answer well', act: 'data-go="materials"'});
+    return out;
+  }
+  function todoHtml() {
+    const td = todos();
+    if (!td.length) return `<div class="card"><div class="card-h"><h2>To do</h2></div><div class="empty">✓ Nothing waiting. Good job!</div></div>`;
+    return `<div class="card"><div class="card-h"><h2>To do</h2><span class="muted small">${td.length}</span></div><div class="list">
+      ${td.slice(0, 8).map(x => `<button class="item" ${x.act}><span class="qi ${x.cls}" style="width:36px;height:36px">${ic(x.icon)}</span>
+        <span class="grow"><div class="t clip">${esc(x.t)}</div><div class="s clip">${esc(x.s)}</div></span>${ic('right')}</button>`).join('')}</div></div>`;
+  }
+  function ownerCard() {
+    const t = today(), d = D();
+    const jt = (d.schedule || []).filter(j => j.date === t && j.status !== 'Cancelled');
+    const paidToday = (d.payments || []).filter(p => p.date === t).reduce((a, p) => a + p.amount, 0);
+    const qWeek = (d.quotes || []).filter(q => (q.type || 'quote') === 'quote' && q.date >= addDays(t, -6));
+    const askToday = (d.ask || []).filter(a => String(a.time).slice(0, 10) === t).length;
+    return `<div class="card owner"><div class="card-h"><h2>Owner summary</h2><span class="muted small">${esc(fmtD(t, {weekday: 'short'}))}</span></div>
+      <div class="osum">
+        <div><span>Jobs done today</span><b>${jt.filter(j => j.status === 'Done').length} / ${jt.length}</b></div>
+        <div><span>Paid today</span><b>${peso(paidToday, 0)}</b></div>
+        <div><span>Unpaid total</span><b>${peso(d.arTotal, 0)}</b></div>
+        <div><span>Quotations (7 days)</span><b>${qWeek.length} · ${peso(qWeek.reduce((a, q) => a + q.total, 0), 0)}</b></div>
+        <div><span>GPT questions today</span><b>${askToday}</b></div>
+        <div><span>Changes today</span><b>${(d.log || []).filter(l => String(l.time).slice(0, 10) === t).length}</b></div>
+      </div></div>`;
+  }
+
   // ───────── job card ─────────
   function jobRow(j, showDate) {
     const k = jobKey(j.job);
     return `<button class="item" data-act="job" data-r="${j.r}">
       <span class="jbar bar-${k}"></span>
       <span class="time">${showDate ? esc(fmtD(j.date)) + '<br>' : ''}${esc(j.time || '—')}</span>
-      <span class="grow"><span class="jt j-${k}">${esc(j.job || 'Job')}</span>
+      <span class="grow"><span class="jt j-${k}">${esc(j.job || 'Job')}</span>${j.photos ? ` <span class="muted" title="Photos">📷</span>` : ''}
         <div class="t clip">${esc(j.customer)}</div>
         <div class="s clip">${esc([j.location, j.units, j.tech].filter(Boolean).join(' · '))}</div></span>
       <span class="r"><span class="pill p-${esc(j.status)}">${esc(j.status)}</span></span>
@@ -287,7 +334,6 @@
     const t = today(), tm = addDays(t, 1);
     const tj = jobsOn(t).filter(j => j.status !== 'Cancelled'), mj = jobsOn(tm).filter(j => j.status !== 'Cancelled');
     const week = (D().schedule || []).filter(j => j.date > t && j.date <= addDays(t, 7) && j.status !== 'Cancelled').length;
-    const due = cleaningDue();
     const unpaid = (D().receivables || []).filter(r => r.bal > 0);
     const arTotal = D().arTotal != null ? D().arTotal : unpaid.reduce((s, r) => s + r.bal, 0);
     const units = (D().units || []).reduce((s, u) => s + Math.max(0, u.now), 0);
@@ -304,6 +350,8 @@
         <button data-act="clean"><span class="qi c-violet">${ic('spark')}</span>Cleaning done</button>
         <button data-go="quote/new"><span class="qi c-red">${ic('doc')}</span>Quotation</button>
       </div>
+      ${S.me && S.me.role === 'owner' ? ownerCard() : ''}
+      ${todoHtml()}
       <div class="stats">
         <button class="stat" data-go="schedule"><span>Jobs today</span><b>${tj.length}</b></button>
         <button class="stat" data-go="schedule"><span>Next 7 days</span><b>${week}</b></button>
@@ -317,10 +365,6 @@
           <div class="list">${mj.map(j => jobRow(j)).join('') || '<div class="empty">No jobs tomorrow</div>'}</div></div>
       </div>
       <div class="grid2 mt">
-        <div class="card"><div class="card-h"><h2>Cleaning due soon</h2><span class="muted small">${due.length} units</span></div>
-          <div class="list">${due.slice(0, 6).map(c => `<button class="item" data-go="cust/${encodeURIComponent(c.c)}">
-            <span class="grow"><div class="t clip">${esc(c.c)}</div><div class="s clip">${esc([c.m, c.l].filter(Boolean).join(' · '))}</div></span>
-            <span class="r small ${c.nc < t ? '' : 'muted'}" style="${c.nc < t ? 'color:var(--red);font-weight:700' : ''}">${esc(fmtD(c.nc))}</span></button>`).join('') || '<div class="empty">Nothing due in the next 30 days</div>'}</div></div>
         <div class="card"><div class="card-h"><h2>Recent activity</h2><button class="btn ghost sm" data-go="activity">See all</button></div>
           <div class="list">${(D().log || []).slice(0, 6).map(l => `<div class="item"><span class="avatar">${esc(initials(l.who))}</span>
             <span class="grow"><div class="t clip small">${esc(l.action)}</div><div class="s clip">${esc(l.details)}</div></span><span class="r muted small">${esc(String(l.time).slice(5))}</span></div>`).join('') || '<div class="empty">Changes made on this site will show here</div>'}</div></div>
@@ -469,6 +513,7 @@
       <div class="btns" style="margin-bottom:14px">
         <button class="btn primary" data-act="newJob" data-cust="${esc(name)}">${ic('cal')} New job</button>
         <button class="btn" data-act="quoteFor" data-cust="${esc(name)}">${ic('doc')} Quotation</button>
+        <button class="btn" data-act="bookClean" data-cust="${esc(name)}">${ic('spark')} Book cleaning</button>
         <button class="btn" data-act="install" data-cust="${esc(name)}">${ic('plus')} Add unit</button>
       </div>
       <div class="card"><div class="card-h"><h2>Units (${rows.length})</h2></div><div class="list">
@@ -920,7 +965,13 @@
         ${j.location ? `<dt>Location</dt><dd>${esc(j.location)}</dd>` : ''}${j.units ? `<dt>Units</dt><dd>${esc(j.units)}</dd>` : ''}
         ${j.tech ? `<dt>Technician</dt><dd>${esc(j.tech)}</dd>` : ''}${j.notes ? `<dt>Notes</dt><dd>${esc(j.notes)}</dd>` : ''}${j.by ? `<dt>Added by</dt><dd>${esc(j.by)}</dd>` : ''}</dl>
       <div class="f"><label>Change status</label><div class="choice">${(D().statuses || ['Scheduled', 'Confirmed', 'Done', 'Moved', 'Cancelled']).map(s => `<label><input type="radio" name="st" value="${s}" ${s === j.status ? 'checked' : ''} data-act="jobStatus" data-r="${j.r}"><span>${s === 'Done' ? '✅ ' : s === 'Cancelled' ? '✖ ' : ''}${s}</span></label>`).join('')}</div></div>
+      <div class="f"><label>Photos</label><div class="btns">
+        <label class="btn" style="cursor:pointer">${ic('camera')} Add photos<input type="file" accept="image/*" multiple hidden data-photo="${j.r}"></label>
+        ${j.photos ? `<a class="btn" href="${esc(j.photos)}" target="_blank" rel="noopener">${ic('sheet')} Open photos</a>` : ''}</div>
+        <div class="hint" id="photoMsg">Photos are saved in Google Drive, one folder per job.</div></div>
       <div class="btns"><button class="btn" data-act="jobEdit" data-r="${j.r}">${ic('edit')} Edit</button>
+        ${j.location ? `<a class="btn" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.location)}" target="_blank" rel="noopener">${ic('pin')} Map</a>` : ''}
+        <button class="btn" data-act="quoteFor" data-cust="${esc(j.customer)}">${ic('doc')} Quotation</button>
         <button class="btn" data-act="printForm" data-f="service" data-r="${j.r}">${ic('print')} Service report</button>
         <button class="btn" data-act="printForm" data-f="startup" data-r="${j.r}">${ic('print')} Start-up report</button>
         <button class="btn" data-go="cust/${encodeURIComponent(j.customer)}">${ic('users')} Customer</button></div>`);
@@ -1076,6 +1127,15 @@
         <button data-act="goInvoice"><span class="qi c-violet">${ic('doc')}</span>Invoice</button>
         <button data-act="newAr"><span class="qi c-amber">${ic('doc')}</span>New contract (receivable)</button></div>`),
     goQuote: () => { closeSheet(); go('quote/new'); },
+    bookClean: el => {
+      const name = el.dataset.cust, g = custGroups().get(name);
+      const rows = g ? g.rows : [];
+      const loc = rows.map(r => r.l).filter(Boolean)[0] || '';
+      const models = {}; rows.forEach(r => { if (r.m) models[r.m] = (models[r.m] || 0) + 1; });
+      const units = Object.entries(models).map(([m, n]) => n + ' × ' + m).join(', ').slice(0, 150);
+      openSheet('Book cleaning', jobForm({customer: name, job: 'Cleaning', location: loc, units, date: addDays(today(), 1)}),
+        `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveJob">Save job</button>`);
+    },
     goInvoice: () => { closeSheet(); go('quote/newinv'); },
     newJob: el => openSheet('New job', jobForm(null, {date: el.dataset.date, cust: el.dataset.cust}),
       `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveJob">Save job</button>`),
@@ -1316,7 +1376,41 @@
       e.preventDefault(); ACT[a.dataset.act](a);
     }
   });
+  async function uploadPhotos(input) {
+    const j = (D().schedule || []).find(x => x.r === +input.dataset.photo);
+    const files = Array.from(input.files || []);
+    if (!j || !files.length) return;
+    const msg = $('#photoMsg');
+    let done = 0, got = false;
+    for (const f of files) {
+      try {
+        if (msg) msg.textContent = tr('Uploading photo') + ` ${done + 1} / ${files.length}…`;
+        const b64 = await shrinkPhoto(f);
+        const last = done === files.length - 1;
+        const r = await call('jobPhoto', {r: j.r, id: j.id, customer: j.customer, b64, mime: 'image/jpeg', last, count: files.length, withData: last});
+        done++;
+        if (last) got = applyData(r.data);
+      } catch (e) { toast(e.message, true); break; }
+    }
+    if (done) { closeSheet(); if (got) render(); else await refresh(true); toast('📷 ' + done + ' ' + tr('photo(s) saved ✓')); }
+  }
+  /** phone photos are big: resize to max 1600 px JPEG (about 300 KB) before upload */
+  function shrinkPhoto(file) {
+    return new Promise((ok, no) => {
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => {
+        const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        ok(c.toDataURL('image/jpeg', 0.82).split(',')[1]);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); no(new Error('Could not read this photo')); };
+      img.src = url;
+    });
+  }
   document.addEventListener('change', e => {
+    if (e.target.matches && e.target.matches('input[data-photo]')) { uploadPhotos(e.target); return; }
     const a = e.target.closest('input[type=radio][data-act]');
     if (a && ACT[a.dataset.act]) ACT[a.dataset.act](a);
   });
