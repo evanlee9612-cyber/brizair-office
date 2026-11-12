@@ -72,7 +72,7 @@
     'Same layout as the old Excel: beginning stock, daily IN and OUT, ending stock. Made automatically from Unit / Part in-out records.': '예전 엑셀과 같은 모양: 월초 재고, 날짜별 입고·출고, 월말 재고. 입출고 기록으로 자동으로 만들어져요.',
     'IN — deliveries (day of month)': '입고 (날짜)', 'OUT — issued / installed (day of month)': '출고 (날짜)', 'Item': '품목', 'Beg': '월초', 'End': '월말',
     // ask
-    'GPT online': 'GPT 켜짐', '● GPT online': '● GPT 켜짐', '● GPT offline — Sir Kim\'s PC is off': '● GPT 꺼짐 — 의찬 형님 컴퓨터가 꺼져 있어요', 'Type your question…': '질문을 쓰세요…', 'Upload a file or photo': '파일·사진 올리기', 'Write a rule / answer': '규칙·답 적기',
+    'GPT online': 'GPT 켜짐', '● GPT online': '● GPT 켜짐', '● GPT offline — Sir Kim\'s PC is off': '● GPT 꺼짐 — 대표님 컴퓨터가 꺼져 있어요', 'Type your question…': '질문을 쓰세요…', 'Upload a file or photo': '파일·사진 올리기', 'Write a rule / answer': '규칙·답 적기',
     'Nothing uploaded yet': '올린 자료 없음', 'Open file': '파일 열기', 'Upload for GPT': 'GPT용 자료 올리기', 'File or photo *': '파일 또는 사진 *',
     'Title': '제목', 'Note for GPT (optional)': 'GPT에게 메모 (선택)', 'What should GPT know?': 'GPT가 알아야 할 내용',
     'PDF, Excel, Word, photo of a document (max 15 MB)': 'PDF·엑셀·워드·서류 사진 (15MB까지)',
@@ -179,7 +179,8 @@
     [/^Payment saved ✓ (.+)$/, '입금 저장 ✓ $1'], [/^Update status: (.+)$/, '상태 정리: $1'], [/^Invoice overdue: (.+)$/, '기한 지난 인보이스: $1'],
     [/^Follow up quotation: (.+)$/, '견적 후속 연락: $1'], [/^Book cleaning: (.+)$/, '청소 예약: $1'], [/^GPT needs information \((\d+)\)$/, 'GPT가 모르는 것 ($1)'], [/^Invoice saved, but could not add to Money: (.+)$/, '인보이스는 저장됐지만 돈에 추가 못 함: $1'],
     [/^(.+) → (Scheduled|Confirmed|Done|Moved|Cancelled)$/, '$1 → $2'], [/^Sent\. GPT will answer in about 20–60 seconds…$/, '보냈어요. GPT가 20~60초 안에 답해요…'],
-    [/^GPT is reading the sheet…$/, 'GPT가 시트를 읽는 중…'], [/^Waiting — Sir Kim's PC is offline\. It will answer when the PC is on\.$/, '대기 중 — 의찬 형님 컴퓨터가 꺼져 있어요. 켜지면 답해요.'], [/^No jobs\. ?$/, '일정 없음. '], [/^\+ Add a job on this day$/, '+ 이날 일정 추가']
+    [/^GPT is reading the sheet…$/, 'GPT가 시트를 읽는 중…'], [/^Sent\. GPT will answer in about 20–60 seconds…$/, '보냈어요. GPT가 20~60초 안에 답해요…'],
+    [/^GPT reached its ChatGPT usage limit\. Please ask again after (.+)\.$/, 'GPT 사용 한도에 걸렸어요. $1 이후에 다시 물어봐 주세요.'], [/^GPT reached its ChatGPT usage limit\. Please ask again later\.$/, 'GPT 사용 한도에 걸렸어요. 잠시 뒤에 다시 물어봐 주세요.'], [/^Waiting — Sir Kim's PC is offline\. It will answer when the PC is on\.$/, '대기 중 — 대표님 컴퓨터가 꺼져 있어요. 켜지면 답해요.'], [/^No jobs\. ?$/, '일정 없음. '], [/^\+ Add a job on this day$/, '+ 이날 일정 추가']
   ];
   const FRAG = [[/\bInstalled (?=[A-Z—])/g, '설치 '], [/ · Last cleaning /g, ' · 마지막 청소 '], [/ · Next$/g, ' · 다음'], [/^Next$/g, '다음'],
     [/\bIndoor SN /g, '실내기 SN '], [/\bOutdoor SN /g, '실외기 SN '], [/ in stock now\b/g, ' 지금 재고'], [/\bstock (\d)/g, '재고 $1'], [/ — still (Scheduled|Confirmed)$/g, ' — 아직 $1'], [/ · due /g, ' · 기한 '], [/ · sent /g, ' · 보냄 '], [/^due /g, '기한 ']];

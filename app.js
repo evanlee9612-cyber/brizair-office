@@ -760,8 +760,8 @@
     const rate = st === 'answered' && a.who === (S.me && S.me.name) ? (a.rating ? `<div class="rated">${/^good/.test(a.rating) ? '👍' : '👎'}</div>`
       : `<div class="rate"><span>Was this answer helpful?</span><button data-act="rate" data-id="${esc(a.id)}" data-good="1">👍 Good</button><button data-act="rate" data-id="${esc(a.id)}" data-good="">👎 Wrong / not enough</button></div>`) : '';
     const ans = st === 'answered' ? `<div class="bub ai">${fmtAnswer(a.a)}</div>${rate}`
-      : st === 'error' ? `<div class="bub ai err">${/^GPT LIMIT: /.test(a.a || '') ? esc(a.a.replace(/^GPT LIMIT: /, '')) : 'Sorry, GPT could not answer this one. Please ask again in a different way, or ask Sir Kim.'}</div>`
-      : `<div class="bub ai wait"><span class="dots3"><i></i><i></i><i></i></span> ${st.indexOf('thinking') === 0 ? 'GPT is reading the sheet…' : D().aiOnline === false ? 'Waiting — Sir Kim\'s PC is offline. It will answer when the PC is on.' : 'Sent. GPT will answer in about 20–60 seconds…'}</div>`;
+      : st === 'error' ? `<div class="bub ai err">${esc(tr(/^GPT LIMIT: /.test(a.a || '') ? a.a.replace(/^GPT LIMIT: /, '') : 'Sorry, GPT could not answer this one. Please ask again in a different way, or ask Sir Kim.'))}</div>`
+      : `<div class="bub ai wait"><span class="dots3"><i></i><i></i><i></i></span> ${esc(tr(st.indexOf('thinking') === 0 ? 'GPT is reading the sheet…' : D().aiOnline === false ? 'Waiting — Sir Kim\'s PC is offline. It will answer when the PC is on.' : 'Sent. GPT will answer in about 20–60 seconds…'))}</div>`;
     return `<div class="qa"><div class="meta">${esc(a.who)} · ${esc(String(a.time || '').slice(5))}</div><div class="bub me">${esc(a.q)}</div>${ans}</div>`;
   }
   function fmtAnswer(t) {
