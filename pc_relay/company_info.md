@@ -36,5 +36,8 @@ Login: each person has a 6-digit PIN. Phone: add the site to the Home Screen. "?
 - Giving a quotation / invoice / statement to the customer: tap "Save & print / PDF" (or "Statement") → in the print screen choose "Save as PDF" (on a phone: Share / Print → Save as PDF) → send the PDF by Viber, Messenger or email, or print it. The invoice layout is temporary until BRIZAIR's own invoice form is added.
 - LG Monthly Report → More → LG Monthly Report → choose the month → daily IN / OUT grid like the old Excel → Print / PDF for LG.
 - Ask GPT → this chat (English, Korean, Tagalog or Kapampangan; 👍 / 👎 on each answer). Materials for AI → upload price lists, brochures, rules, sample documents, photos; GPT reads them.
-- Mistakes: open the record and fix it, or record a correction (e.g. IN 1 to cancel a wrong extra OUT 1). Rows are never deleted on the site.
+- Mistakes (rows are never deleted on the site):
+  - Job, quotation, invoice → open it and fix it (job: "Edit"; quotation / invoice: change, then "Save & print / PDF").
+  - Unit / part in-out → cannot be edited on the site. Record the opposite entry with a note, e.g. wrote OUT 2 but it was 1 → Unit in / out → IN 1, note "correction". Stock NOW becomes right.
+  - Payment, new contract, new installation → cannot be edited on the site. Tell Jheena or Sir Kim; they fix the row in the Google Sheet (More → Open Google Sheet).
 (The Telegram bot @Brizair_bot still exists for Sir Kim, but the website is the main tool for the team.)
