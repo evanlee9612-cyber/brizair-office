@@ -848,7 +848,7 @@
         ['📊 LG monthly report', 'More → LG Monthly Report → choose the month → Print / PDF.'],
         ['✅ To do (Home)', 'Home shows what needs attention: old jobs to update, overdue invoices, quotations to follow up, customers to book for cleaning.'],
         ['📷 Job photos', 'Open a job → Add photos. They are saved in Google Drive, one folder per job.'],
-        ['❓ Mistake?', 'Open the item again and fix it, or record a correction (e.g. an IN to cancel a wrong OUT). Nothing is deleted.']]
+        ['❓ Mistake?', 'Jobs, quotations and invoices: open and fix. Stock in / out: record the opposite (IN 1 cancels a wrong OUT 1). Wrong payment: tell Jheena or Sir Kim to fix it in the Google Sheet.']]
         .map(x => `<div class="item" style="align-items:flex-start"><span class="grow"><div class="t">${x[0]}</div><div class="s" style="white-space:normal">${x[1]}</div></span></div>`).join('')}
     </div></div>`;
 

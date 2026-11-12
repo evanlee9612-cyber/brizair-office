@@ -141,7 +141,7 @@
     'Bottom middle button. Ask in English, Tagalog, Kapampangan or Korean. Wrong answer? Tap 👎 and upload the right info in Materials for AI.': '아래 가운데 버튼. 영어·타갈로그어·카팡팡안어·한국어로 물어보세요. 답이 틀리면 👎 누르고 AI 자료에 맞는 정보를 올리세요.',
     'Open a job → Service report or Start-up report. Customer, model and technician are filled in.': '일정 열기 → 서비스 리포트 또는 시운전 기록표. 손님·모델·기사가 채워져 있어요.',
     'More → LG Monthly Report → choose the month → Print / PDF.': '더보기 → LG 월별 보고 → 달 고르기 → 인쇄 / PDF.',
-    'Open the item again and fix it, or record a correction (e.g. an IN to cancel a wrong OUT). Nothing is deleted.': '다시 열어서 고치거나 바로잡는 기록을 하세요 (예: 잘못 넣은 OUT을 IN으로 상쇄). 지워지는 건 없어요.',
+    'Jobs, quotations and invoices: open and fix. Stock in / out: record the opposite (IN 1 cancels a wrong OUT 1). Wrong payment: tell Jheena or Sir Kim to fix it in the Google Sheet.': '일정·견적서·인보이스는 열어서 고치면 돼요. 재고 입출고는 반대로 한 번 더 기록 (잘못된 OUT 1 → IN 1). 입금을 잘못 넣었으면 Jheena나 대표님이 구글시트에서 고쳐요.',
     'Sorry, GPT could not answer this one. Please ask again in a different way, or ask Sir Kim.': '죄송해요, 이 질문은 GPT가 답하지 못했어요. 다르게 다시 묻거나 대표님께 물어보세요.',
     'To do': '할 일', 'Owner summary': '대표님 요약', 'Jobs done today': '오늘 작업 완료', 'Paid today': '오늘 입금', 'Unpaid total': '미수금 합계',
     'Quotations (7 days)': '견적 (7일)', 'GPT questions today': '오늘 GPT 질문', 'Changes today': '오늘 기록', '✓ Nothing waiting. Good job!': '✓ 밀린 일 없음. 잘하셨어요!',
