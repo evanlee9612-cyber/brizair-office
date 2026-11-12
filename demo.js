@@ -75,7 +75,7 @@
   function db() {
     if (!DB) { try { DB = JSON.parse(localStorage.getItem('brz_demo_db') || 'null'); } catch (e) { DB = null; } }
     if (!DB || DB.day !== T) DB = Object.assign(fresh(), {day: T});
-    DB.ask = DB.ask || []; DB.know = DB.know || []; DB.aiOnline = true;
+    DB.ask = DB.ask || []; DB.know = DB.know || []; DB.needs = DB.needs || [{id: 'n1', time: T + ' 09:12', who: 'Ladie', q: 'How much is aircon cleaning for a 1.5hp split type?', missing: 'Cleaning price list (per unit type / HP)', rating: ''}]; DB.aiOnline = true;
     return DB;
   }
   function persist() { try { localStorage.setItem('brz_demo_db', JSON.stringify(DB)); } catch (e) { } }
@@ -113,6 +113,7 @@
         text: a === 'kNote' ? b.text : (b.note ? 'Note: ' + b.note + '\n' : '') + '(demo: file text would appear here)', url: ''});
       log(me, 'Material added', b.title || b.name || ''); persist(); return {ok: true, chars: a === 'kUpload' ? 1200 : 0};
     }
+    if (a === 'askRate') { const x = D.ask.find(k => k.id === b.id); if (x) x.rating = b.good ? 'good' : 'bad: ' + (b.why || ''); if (!b.good && x) D.needs.unshift({id: x.id, time: x.time, who: me.name, q: x.q, rating: x.rating, missing: ''}); persist(); return {ok: true}; }
     if (a === 'kHide') { D.know = D.know.filter(k => k.id !== b.id); persist(); return {ok: true}; }
     if (a === 'addJob') {
       const j = b.job; if (!j.date || !j.customer) err('Date and customer are needed');
@@ -141,7 +142,8 @@
       log(me, 'New installation', `${x.customer} · ${x.model}`);
     } else if (a === 'saveQuote') {
       const q = b.quote; let ex = q.no && D.quotes.find(x => x.no === q.no);
-      if (!ex) { q.no = 'Q-' + T.slice(0, 4) + '-' + String(D.quotes.length + 1).padStart(4, '0'); ex = {r: ++seq, no: q.no, status: 'Draft'}; D.quotes.push(ex); }
+      const inv = q.type === 'invoice', pre = inv ? 'INV' : 'Q';
+      if (!ex) { q.no = pre + '-' + T.slice(0, 4) + '-' + String(D.quotes.filter(x => (x.type || 'quote') === (q.type || 'quote')).length + 1).padStart(4, '0'); ex = {r: ++seq, no: q.no, type: q.type || 'quote', status: inv ? 'Unpaid' : 'Draft'}; D.quotes.push(ex); }
       Object.assign(ex, {date: q.date, customer: q.customer, project: q.project, total: q.total, by: q.by, data: q});
       log(me, 'Quotation saved', q.no + ' · ' + q.customer);
       recalc(D); persist();

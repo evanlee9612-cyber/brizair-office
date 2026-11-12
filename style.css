@@ -382,3 +382,14 @@ table.tbl { border-collapse: collapse; width: 100%; font-size: 13px; }
 @media (min-width: 900px) { .askform { left: 230px; bottom: 0; padding: 14px 28px; } .qalist { margin-bottom: 110px; } }
 .me.on { border-color: var(--brand); color: var(--brand); }
 body[data-route=ask] .fab { display: none; }
+.p-Unpaid { background: var(--red-2); color: var(--red); } .p-Partiallypaid { background: var(--amber-2); color: var(--amber); } .p-Paid { background: var(--green-2); color: var(--green); }
+.rate { align-self: flex-start; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-3); margin-left: 4px; }
+.rate button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 12.5px; font-weight: 600; }
+.rated { align-self: flex-start; font-size: 13px; margin-left: 6px; }
+.top .iconbtn { width: 36px; height: 36px; }
+@media (max-width: 420px) { .sync span { display: none; } .me .clip { display: none; } .me { padding: 4px; } .logo small { display: none; } }
+.btns .btn { white-space: nowrap; flex: 1 1 auto; }
+@media (max-width: 420px) { .btns .btn { font-size: 14px; padding: 9px 10px; } }
+body[data-route=quote] .fab, body[data-route=ask] .fab { display: none; }
+.savebar { position: sticky; bottom: calc(var(--tabs-h) + env(safe-area-inset-bottom)); z-index: 5; background: rgba(243,245,249,.96); padding: 10px 0; margin: 0 -2px; }
+@media (min-width: 900px) { .savebar { bottom: 0; } }
