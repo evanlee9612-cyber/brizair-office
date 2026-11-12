@@ -276,10 +276,19 @@ def export(key):
           ''.join(f'Q ({qa.get("who")}, {qa.get("time")}): {qa.get("q")}\nA: {qa.get("a")}\n\n' for qa in recent))
     index += ['', 'recent_answers.md — earlier questions and answers']
     write(os.path.join(tmp, 'INDEX.md'), '\n'.join(index) + '\n')
-    shutil.rmtree(DATA, ignore_errors=True)
-    os.replace(tmp, DATA)
+    swap_in(tmp)
     log(f'data copied: {len(d["tabs"])} tabs, {len(d.get("knowledge", []))} materials')
     return d.get('dataVer')
+
+
+def swap_in(tmp):
+    """replace data/ with the new copy; if a file is open (Windows), copy over it instead"""
+    shutil.rmtree(DATA, ignore_errors=True)
+    try:
+        os.replace(tmp, DATA)
+    except OSError:
+        shutil.copytree(tmp, DATA, dirs_exist_ok=True)
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def export_archive(key):
@@ -414,7 +423,7 @@ def main():
                     post({'a': 'relayAnswer', 'key': key, 'id': q['id'], 'error': True, 'answer': str(e)[:300]})
             if once:
                 return
-            time.sleep(1 if qs else 4)
+            time.sleep(1 if qs else 5)
         except Exception as e:  # noqa — network hiccups: wait and retry
             fails += 1
             log(f'error: {e}')

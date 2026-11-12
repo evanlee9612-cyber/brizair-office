@@ -147,7 +147,7 @@
     'Money — unpaid & payments': '돈 — 미수금·입금', 'Materials for AI (upload)': 'AI 자료 올리기', 'Language': '언어', 'How to use': '사용법',
     'No activity yet': '기록 없음', 'Latest changes made on this site (also saved in the sheet tab APP LOG).': '사이트에서 바꾼 최근 내용 (시트 APP LOG 탭에도 저장돼요).',
     // toasts / confirms
-    'Saved ✓': '저장했어요 ✓', 'Job added ✓': '일정 추가 ✓', 'Job updated ✓': '일정 수정 ✓', 'Payment saved ✓': '입금 저장 ✓', 'Contract added ✓': '계약 추가 ✓',
+    'Saved ✓': '저장했어요 ✓', 'Saving…': '저장 중…', 'Uploaded ✓ (no text found — add a note so GPT knows what it is)': '올렸어요 ✓ (글자를 못 찾았어요 — 무슨 자료인지 메모를 남겨 주세요)', 'Job added ✓': '일정 추가 ✓', 'Job updated ✓': '일정 수정 ✓', 'Payment saved ✓': '입금 저장 ✓', 'Contract added ✓': '계약 추가 ✓',
     'Installation saved ✓': '설치 저장 ✓', 'Cleaning saved ✓ next cleaning in 6 months': '청소 저장 ✓ 다음 청소는 6개월 뒤',
     'Saved ✓ GPT will use it': '저장 ✓ GPT가 이제 이걸 써요', 'Removed': '지웠어요', 'GPT answered your question ✓': 'GPT가 답했어요 ✓',
     'Date and customer are needed': '날짜와 손님이 필요해요', 'Choose IN or OUT': 'IN 또는 OUT을 고르세요', 'Qty must be 1 or more': '수량은 1 이상',

@@ -70,13 +70,13 @@
   const timeSort = t => { const m = String(t || '').match(/(\d{1,2})(?::(\d{2}))?\s*([ap])?/i); if (!m) return 9999; let h = +m[1] % 12; if (m[3] && /p/i.test(m[3])) h += 12; if (!m[3] && +m[1] < 7) h += 12; return h * 60 + (+m[2] || 0); };
   const greet = () => { const h = +new Intl.DateTimeFormat('en-US', {timeZone: 'Asia/Manila', hour: 'numeric', hour12: false}).format(new Date()); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; };
 
-  function toast(msg, err) {
+  function toast(msg, err, ms) {
     $$('.toast').forEach(t => t.remove());
     const t = document.createElement('div');
     t.className = 'toast' + (err ? ' err' : '');
     t.textContent = msg;
     document.body.appendChild(t);
-    setTimeout(() => t.remove(), err ? 5000 : 2600);
+    setTimeout(() => t.remove(), ms || (err ? 5000 : 2600));
   }
 
   // ───────── server ─────────
@@ -107,12 +107,24 @@
     }
   }
 
+  function applyData(d) {
+    if (!d || !d.ok) return false;
+    const partial = Array.isArray(d.sections) && d.sections.length < 7 && S.D;
+    S.D = partial ? Object.assign({}, S.D, d) : d;  // a save sends back only the sections it changed
+    S.me = d.me || S.me;
+    LS.set(KEY + 'data', d);
+    setSync('ok');
+    S._lastRefresh = Date.now();
+    return true;
+  }
+  /** write → the server answers with fresh data in the same reply, so lists and totals are right at once */
   async function save(a, body, okMsg) {
+    toast('Saving…', false, 60000);
     try {
-      const r = await call(a, body);
-      toast(okMsg || 'Saved ✓');
+      const r = await call(a, Object.assign({}, body, {withData: true}));
       closeSheet();
-      refresh(true);
+      if (applyData(r.data)) render(); else refresh(true);
+      toast(okMsg || 'Saved ✓');
       return r;
     } catch (e) {
       toast(e.message, true);
@@ -918,7 +930,7 @@
     const pays = (D().payments || []).filter(p => p.project === r.project);
     openSheet(r.project, `
       <dl class="kv"><dt>Balance now</dt><dd class="big">${peso(r.bal)}</dd><dt>Status</dt><dd><span class="pill p-${esc(r.status)}">${esc(r.status)}</span></dd>
-        <dt>Contract</dt><dd>${esc(r.contract || '—')}</dd><dt>Balance Nov 12</dt><dd>${peso(r.bal0)}</dd><dt>Paid since</dt><dd>${peso(r.paid)}</dd>
+        <dt>Contract</dt><dd>${esc(/^-?[\d.]+$/.test(String(r.contract)) ? money(r.contract) : (r.contract || '—'))}</dd><dt>Balance Nov 12</dt><dd>${peso(r.bal0)}</dd><dt>Paid since</dt><dd>${peso(r.paid)}</dd>
         ${r.ref ? `<dt>Ref</dt><dd>${esc(r.ref)}</dd>` : ''}${r.remarks ? `<dt>Remarks</dt><dd>${esc(r.remarks)}</dd>` : ''}</dl>
       <h2 style="margin-bottom:6px">Payments</h2><div class="list">${pays.map(p => `<div class="item"><span class="grow"><div class="t small">${esc(fmtD(p.date, {year: 'numeric'}))} · ${esc(p.method)}</div><div class="s">${esc([p.by, p.notes].filter(Boolean).join(' · '))}</div></span><span class="r num" style="font-weight:800;color:var(--green)">${peso(p.amount)}</span></div>`).join('') || '<div class="empty">No payments recorded since Nov 12</div>'}</div>`,
       `<button class="btn" data-act="soa" data-r="${r.r}">${ic('print')} Statement</button><button class="btn primary" data-act="pay" data-p="${esc(r.project)}">${ic('peso')} Payment received</button>`);
@@ -1195,17 +1207,18 @@
       el.disabled = true;
       try {
         const isNewInv = q.type === 'invoice' && !q.no, addAr = isNewInv && $('#q_ar') && $('#q_ar').checked;
-        const r = await call('saveQuote', {quote: q});
+        toast('Saving…', false, 60000);
+        const r = await call('saveQuote', {quote: q, withData: !addAr});
         q.no = r.no;
         if (addAr) {
-          try { await call('newReceivable', {rec: {project: (q.customer + ' ' + r.no).slice(0, 110), ref: r.no + (q.po ? ' / PO ' + q.po : ''), contract: String(q.total), balance: String(q.total), remarks: q.due ? 'due ' + fmtD(q.due, {year: 'numeric'}) : ''}}); }
+          try { const r2 = await call('newReceivable', {withData: true, rec: {project: (q.customer + ' ' + r.no).slice(0, 110), ref: r.no + (q.po ? ' / PO ' + q.po : ''), contract: String(q.total), balance: String(q.total), remarks: q.due ? 'due ' + fmtD(q.due, {year: 'numeric'}) : ''}}); r.data = r2.data; }
           catch (e) { toast('Invoice saved, but could not add to Money: ' + e.message, true); }
         }
         toast('Saved ✓ ' + r.no);
         if (el.dataset.print) printHtml(quoteDoc(q));
         S.forceRender = true;
         if (location.hash !== '#quote/' + r.no) history.replaceState(null, '', '#quote/' + r.no);
-        await refresh(true);
+        if (applyData(r.data)) { S.forceRender = false; render(); } else await refresh(true);
       } catch (e) { toast(e.message, true); }
       el.disabled = false;
     },
@@ -1280,9 +1293,10 @@
       el.disabled = true; el.textContent = 'Uploading… (GPT is reading the file)';
       try {
         const b64 = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(file); });
-        const r = await call('kUpload', {b64, name: file.name, mime: file.type, title: f.title || file.name, note: f.note});
+        const r = await call('kUpload', {b64, name: file.name, mime: file.type, title: f.title || file.name, note: f.note, withData: true});
+        closeSheet();
+        if (applyData(r.data)) render(); else refresh(true);
         toast(r.chars ? `Uploaded ✓ GPT can read ${r.chars.toLocaleString()} characters` : 'Uploaded ✓ (no text found — add a note so GPT knows what it is)');
-        closeSheet(); refresh(true);
       } catch (e) { toast(e.message, true); el.disabled = false; el.textContent = 'Upload'; }
     },
     kHide: async el => {

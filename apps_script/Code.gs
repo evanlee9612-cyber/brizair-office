@@ -38,12 +38,19 @@ function doPost(e) {
     if (!me) return out({ok: false, error: 'login', msg: 'Please log in again.'});
     var f = ACTIONS[req.a];
     if (!f) return out({ok: false, error: 'unknown action'});
-    return out(f(req, me));
+    var res = f(req, me);
+    if (res && res.ok && req.withData && req.a !== 'boot') res.data = boot_(req, me, CHANGES[req.a] || SECTIONS);  // fresh numbers in the same reply
+    return out(res);
   } catch (err) {
-    try { log_('system', 'error', String(err && err.message || err) + ' @' + req.a); } catch (x) {}
-    return out({ok: false, error: 'server', msg: String(err && err.message || err)});
+    if (!(err && err.user)) { try { log_('system', 'error', String(err && err.message || err) + ' @' + req.a); } catch (x) {} }
+    return out({ok: false, error: err && err.user ? 'input' : 'server', msg: String(err && err.message || err)});
   }
 }
+
+/** which data sections each save changes (sent back right away) */
+var CHANGES = {addJob: ['schedule', 'log'], updateJob: ['schedule', 'log'], stockMove: ['stock', 'log'], payment: ['money', 'log'],
+  newReceivable: ['money', 'log'], cleaningDone: ['customers', 'log'], addInstall: ['customers', 'log'], saveQuote: ['docs', 'log'],
+  quoteStatus: ['docs', 'log'], kNote: ['ask', 'log'], kUpload: ['ask', 'log'], kHide: ['ask', 'log'], askRate: ['ask', 'log']};
 
 var ACTIONS = {
   boot: boot_,
@@ -64,6 +71,9 @@ var ACTIONS = {
   kUpload: kUpload_,
   kHide: kHide_
 };
+
+/** an error caused by what the person typed (shown to them, not logged as a system error) */
+function bad_(msg) { var e = new Error(msg); e.user = true; return e; }
 
 function out(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
@@ -158,8 +168,8 @@ function norm_(h) { return String(h).replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+
 
 function table_(name, keyCol) {
   var sh = sh_(name);
-  var lr = sh.getLastRow(), lc = sh.getLastColumn();
-  var vals = lr ? sh.getRange(1, 1, lr, lc).getValues() : [[]];
+  var vals = sh.getDataRange().getValues();
+  var lc = vals[0] ? vals[0].length : 0;
   var head = vals[0].map(norm_);
   var idx = {};
   head.forEach(function (h, i) { if (h && idx[h] === undefined) idx[h] = i; });
@@ -173,7 +183,10 @@ function col_(T, name) {
 function colOpt_(T, name) { var i = T.idx[name.toLowerCase()]; return i === undefined ? -1 : i; }
 
 function d_(v) {
-  if (v instanceof Date && !isNaN(v)) return Utilities.formatDate(v, TZ, 'yyyy-MM-dd');
+  if (v instanceof Date && !isNaN(v)) {  // script time zone = Asia/Manila, so local getters are Manila dates (fast)
+    var y = v.getFullYear(), m = v.getMonth() + 1, d = v.getDate();
+    return y + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d;
+  }
   var s = String(v || '').trim(), m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (m) return m[3] + '-' + ('0' + m[1]).slice(-2) + '-' + ('0' + m[2]).slice(-2);
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
@@ -189,10 +202,14 @@ function s_(v) {
 }
 function toDate_(iso) {
   var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) throw new Error('Bad date: ' + iso);
+  if (!m) throw bad_('Bad date: ' + iso);
   return new Date(+m[1], +m[2] - 1, +m[3]);
 }
-function clip_(v, n) { return String(v === undefined || v === null ? '' : v).replace(/^[=+\-@]/, "'$&").slice(0, n || 300); }
+function clip_(v, n) {
+  var s = String(v === undefined || v === null ? '' : v).trim().slice(0, n || 300);
+  if (/^[=+\-@]/.test(s) || /^[\d\s\/\-.:,]+([ap]m)?$/i.test(s) || /^\d{1,2}[\/\-][a-z]{3}/i.test(s)) s = "'" + s;  // keep as plain text
+  return s;
+}
 function today_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'); }
 function id_(p) { return 'BRZ-' + p + '-' + Utilities.formatDate(new Date(), TZ, 'yyyyMMdd') + '-9' + ('000' + Math.floor(Math.random() * 10000)).slice(-4); }
 
@@ -242,101 +259,125 @@ function done_(me, action, details, alert) {
 }
 
 // ───────────────────────── read everything ─────────────────────────
-function boot_(req, me) {
-  var out = {ok: true, me: {name: me.name, role: me.role}, at: new Date().toISOString(), v: VERSION,
-    sheetUrl: ss_().getUrl(), jobs: JOBS, statuses: STATUSES, methods: METHODS};
-
-  var T = table_('UNITS');
-  out.units = rows_(T, function (r, i) {
-    var item = s_(r[col_(T, 'item')]); if (!item) return null;
-    return {r: i + 1, item: item, type: s_(r[col_(T, 'type')]), hp: s_(r[col_(T, 'hp')]), start: n_(r[col_(T, 'start nov 1')]) || 0,
-      now: n_(r[col_(T, 'now')]) || 0, srp: n_(r[col_(T, 'srp')]), cost: n_(r[col_(T, 'cost')]),
-      supplier: s_(r[colOpt_(T, 'supplier')]), notes: s_(r[colOpt_(T, 'notes')])};
-  });
-  T = table_('PARTS');
-  out.parts = rows_(T, function (r, i) {
-    var item = s_(r[col_(T, 'item')]); if (!item) return null;
-    return {r: i + 1, item: item, pn: s_(r[colOpt_(T, 'part no.')]), group: s_(r[colOpt_(T, 'group')]),
-      start: n_(r[col_(T, 'start nov 1')]) || 0, now: n_(r[col_(T, 'now')]) || 0,
-      price: n_(r[colOpt_(T, 'customer price w/ vat')]), cost: n_(r[colOpt_(T, 'lg cost')]), notes: s_(r[colOpt_(T, 'notes')])};
-  });
-  out.unitLog = moves_('UNIT IN-OUT');
-  out.partLog = moves_('PART IN-OUT');
-
-  T = table_('SCHEDULE');
-  out.schedule = rows_(T, function (r, i) {
-    var date = d_(r[col_(T, 'date')]), cust = s_(r[col_(T, 'customer')]);
-    if (!date && !cust) return null;
-    return {r: i + 1, date: date, time: timeStr_(r[col_(T, 'time')]), job: s_(r[col_(T, 'job')]), customer: cust,
-      location: s_(r[col_(T, 'location')]), units: s_(r[col_(T, 'units / model')]), tech: s_(r[col_(T, 'technician')]),
-      status: s_(r[col_(T, 'status')]) || 'Scheduled', notes: s_(r[col_(T, 'notes')]), by: s_(r[colOpt_(T, 'added by')]),
-      id: s_(r[colOpt_(T, 'bot record id')])};
-  });
-
-  T = table_('RECEIVABLES');
-  var recs = [], total = null;
-  for (var i = 1; i < T.vals.length; i++) {
-    var r = T.vals[i], proj = s_(r[col_(T, 'customer / project')]);
-    if (/^total/i.test(proj)) { total = n_(r[col_(T, 'balance now')]); break; }
-    if (!proj) continue;
-    recs.push({r: i + 1, no: s_(r[col_(T, 'no.')]), project: proj, ref: s_(r[colOpt_(T, 'ref')]),
-      contract: s_(r[col_(T, 'contract price')]), bal0: n_(r[col_(T, 'balance nov 12')]) || 0, paid: n_(r[col_(T, 'new payments')]) || 0,
-      bal: n_(r[col_(T, 'balance now')]) || 0, status: s_(r[col_(T, 'status')]), remarks: s_(r[col_(T, 'remarks')])});
-  }
-  out.receivables = recs;
-  out.arTotal = total;
-
-  T = table_('PAYMENTS');
-  out.payments = rows_(T, function (r, i) {
-    var amt = n_(r[col_(T, 'amount')]), proj = s_(r[col_(T, 'customer / project')]);
-    if (!proj && amt === null) return null;
-    return {r: i + 1, date: d_(r[col_(T, 'date')]), project: proj, amount: amt || 0, method: s_(r[col_(T, 'method')]),
-      by: s_(r[colOpt_(T, 'received by')]), notes: s_(r[colOpt_(T, 'notes')])};
-  });
-
-  T = table_('CUSTOMERS');
-  var C = {c: col_(T, 'customer'), co: col_(T, 'company / project'), l: col_(T, 'location'), inv: col_(T, 'invoice date'),
-    m: col_(T, 'model'), d: col_(T, 'description'), q: col_(T, 'qty'), im: col_(T, 'indoor model'), isn: col_(T, 'indoor sn'),
-    ii: col_(T, 'indoor installed'), om: col_(T, 'outdoor model'), osn: col_(T, 'outdoor sn'), oi: col_(T, 'outdoor installed'),
-    su: col_(T, 'start-up'), lc: col_(T, 'last cleaning'), nc: col_(T, 'next cleaning'), rem: colOpt_(T, 'remarks'),
-    cp: colOpt_(T, 'customer price w/ install'), w: colOpt_(T, 'warranty claim')};
-  out.customers = rows_(T, function (r, i) {
-    var c = s_(r[C.c]), m = s_(r[C.m]);
-    if (!c && !m) return null;
-    if (/^(model|indoor serial #|serial #)$/i.test(s_(r[C.isn])) || /^model$/i.test(m)) return null;  // repeated header rows
-    var o = {r: i + 1, c: c, co: s_(r[C.co]), l: s_(r[C.l]), m: m, d: s_(r[C.d]), q: s_(r[C.q]),
-      isn: s_(r[C.isn]), osn: s_(r[C.osn]), inst: d_(r[C.ii]) || d_(r[C.oi]), inv: d_(r[C.inv]),
-      lc: d_(r[C.lc]), nc: d_(r[C.nc]), rem: C.rem >= 0 ? s_(r[C.rem]) : ''};
-    Object.keys(o).forEach(function (k) { if (o[k] === '') delete o[k]; });
-    return o;
-  });
-
-  out.quotes = [];
-  ['QUOTES', 'INVOICES'].forEach(function (tab) {
-    var qs = ss_().getSheetByName(tab);
-    if (!qs || qs.getLastRow() < 2) return;
-    qs.getRange(2, 1, qs.getLastRow() - 1, 9).getValues().forEach(function (r, i) {
-      if (!r[0]) return;
-      var data = {}; try { data = JSON.parse(r[8] || '{}'); } catch (x) {}
-      out.quotes.push({r: i + 2, no: s_(r[0]), type: tab === 'INVOICES' ? 'invoice' : 'quote', date: d_(r[1]), customer: s_(r[2]), project: s_(r[3]),
-        total: n_(r[4]) || 0, status: s_(r[5]), by: s_(r[6]), updated: s_(r[7]), data: data});
+/** Read data for the website. parts = which sections (default all). Saves ask only for what changed (faster). */
+var SECTIONS = ['stock', 'schedule', 'money', 'customers', 'docs', 'ask', 'log'];
+function boot_(req, me, parts) {
+  var t0 = Date.now(), tm = {};
+  var want = {};
+  (parts || SECTIONS).forEach(function (k) { want[k] = true; });
+  var out = {ok: true, me: {name: me.name, role: me.role}, at: new Date().toISOString(), v: VERSION, sections: parts || SECTIONS,
+    sheetUrl: 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit', jobs: JOBS, statuses: STATUSES, methods: METHODS};
+  var T, i;
+  if (want.stock) {
+    T = table_('UNITS');
+    out.units = rows_(T, function (r, i) {
+      var item = s_(r[col_(T, 'item')]); if (!item) return null;
+      return {r: i + 1, item: item, type: s_(r[col_(T, 'type')]), hp: s_(r[col_(T, 'hp')]), start: n_(r[col_(T, 'start nov 1')]) || 0,
+        now: n_(r[col_(T, 'now')]) || 0, srp: n_(r[col_(T, 'srp')]), cost: n_(r[col_(T, 'cost')]),
+        supplier: s_(r[colOpt_(T, 'supplier')]), notes: s_(r[colOpt_(T, 'notes')])};
     });
-  });
-  out.ask = askRows_(40);
-  out.needs = askRows_(400).filter(function (r) { return r.missing || /^bad/.test(r.rating) || r.status === 'error'; }).slice(-40).reverse()
-    .map(function (r) { return {id: r.id, time: r.time, who: r.who, q: r.q, missing: r.missing, rating: r.rating}; });
-  out.know = knowRows_(false).map(function (k) { k.text = String(k.text || '').slice(0, 280); return k; });
-  var seen = +(PropertiesService.getScriptProperties().getProperty('RELAY_SEEN') || 0);
-  out.aiOnline = seen > 0 && Date.now() - seen < 3 * 60000;
-  out.aiSeen = seen ? new Date(seen).toISOString() : '';
-  var lg = ss_().getSheetByName('APP LOG');
-  out.log = [];
-  if (lg && lg.getLastRow() > 1) {
-    var n = Math.min(40, lg.getLastRow() - 1);
-    out.log = lg.getRange(lg.getLastRow() - n + 1, 1, n, 4).getDisplayValues().reverse()
-      .filter(function (r) { return r[2] !== 'login'; })
-      .map(function (r) { return {time: r[0], who: r[1], action: r[2], details: r[3]}; });
+    T = table_('PARTS');
+    out.parts = rows_(T, function (r, i) {
+      var item = s_(r[col_(T, 'item')]); if (!item) return null;
+      return {r: i + 1, item: item, pn: s_(r[colOpt_(T, 'part no.')]), group: s_(r[colOpt_(T, 'group')]),
+        start: n_(r[col_(T, 'start nov 1')]) || 0, now: n_(r[col_(T, 'now')]) || 0,
+        price: n_(r[colOpt_(T, 'customer price w/ vat')]), cost: n_(r[colOpt_(T, 'lg cost')]), notes: s_(r[colOpt_(T, 'notes')])};
+    });
+    out.unitLog = moves_('UNIT IN-OUT');
+    out.partLog = moves_('PART IN-OUT');
+    tm.stock = Date.now() - t0;
   }
+  if (want.schedule) {
+    T = table_('SCHEDULE');
+    out.schedule = rows_(T, function (r, i) {
+      var date = d_(r[col_(T, 'date')]), cust = s_(r[col_(T, 'customer')]);
+      if (!date && !cust) return null;
+      return {r: i + 1, date: date, time: timeStr_(r[col_(T, 'time')]), job: s_(r[col_(T, 'job')]), customer: cust,
+        location: s_(r[col_(T, 'location')]), units: s_(r[col_(T, 'units / model')]), tech: s_(r[col_(T, 'technician')]),
+        status: s_(r[col_(T, 'status')]) || 'Scheduled', notes: s_(r[col_(T, 'notes')]), by: s_(r[colOpt_(T, 'added by')]),
+        id: s_(r[colOpt_(T, 'bot record id')])};
+    });
+    tm.schedule = Date.now() - t0;
+  }
+  if (want.money) {
+    T = table_('RECEIVABLES');
+    var recs = [], total = null;
+    for (i = 1; i < T.vals.length; i++) {
+      var r = T.vals[i], proj = s_(r[col_(T, 'customer / project')]);
+      if (/^total/i.test(proj)) { total = n_(r[col_(T, 'balance now')]); break; }
+      if (!proj) continue;
+      recs.push({r: i + 1, no: s_(r[col_(T, 'no.')]), project: proj, ref: s_(r[colOpt_(T, 'ref')]),
+        contract: s_(r[col_(T, 'contract price')]), bal0: n_(r[col_(T, 'balance nov 12')]) || 0, paid: n_(r[col_(T, 'new payments')]) || 0,
+        bal: n_(r[col_(T, 'balance now')]) || 0, status: s_(r[col_(T, 'status')]), remarks: s_(r[col_(T, 'remarks')])});
+    }
+    out.receivables = recs;
+    out.arTotal = total;
+    T = table_('PAYMENTS');
+    out.payments = rows_(T, function (r, i) {
+      var amt = n_(r[col_(T, 'amount')]), proj = s_(r[col_(T, 'customer / project')]);
+      if (!proj && amt === null) return null;
+      return {r: i + 1, date: d_(r[col_(T, 'date')]), project: proj, amount: amt || 0, method: s_(r[col_(T, 'method')]),
+        by: s_(r[colOpt_(T, 'received by')]), notes: s_(r[colOpt_(T, 'notes')])};
+    });
+    tm.money = Date.now() - t0;
+  }
+  if (want.customers) {
+    T = table_('CUSTOMERS');
+    var C = {c: col_(T, 'customer'), co: col_(T, 'company / project'), l: col_(T, 'location'), inv: col_(T, 'invoice date'),
+      m: col_(T, 'model'), d: col_(T, 'description'), q: col_(T, 'qty'), isn: col_(T, 'indoor sn'),
+      ii: col_(T, 'indoor installed'), osn: col_(T, 'outdoor sn'), oi: col_(T, 'outdoor installed'),
+      lc: col_(T, 'last cleaning'), nc: col_(T, 'next cleaning'), rem: colOpt_(T, 'remarks')};
+    out.customers = rows_(T, function (r, i) {
+      var c = s_(r[C.c]), m = s_(r[C.m]);
+      if (!c && !m) return null;
+      if (/^(model|indoor serial #|serial #)$/i.test(s_(r[C.isn])) || /^model$/i.test(m)) return null;  // repeated header rows
+      var o = {r: i + 1, c: c, co: s_(r[C.co]), l: s_(r[C.l]), m: m, d: s_(r[C.d]), q: s_(r[C.q]),
+        isn: s_(r[C.isn]), osn: s_(r[C.osn]), inst: d_(r[C.ii]) || d_(r[C.oi]), inv: d_(r[C.inv]),
+        lc: d_(r[C.lc]), nc: d_(r[C.nc]), rem: C.rem >= 0 ? s_(r[C.rem]) : ''};
+      Object.keys(o).forEach(function (k) { if (o[k] === '') delete o[k]; });
+      return o;
+    });
+    tm.customers = Date.now() - t0;
+  }
+  if (want.docs) {
+    out.quotes = [];
+    ['QUOTES', 'INVOICES'].forEach(function (tab) {
+      var qs = ss_().getSheetByName(tab);
+      if (!qs) return;
+      var v = qs.getDataRange().getValues();
+      for (var k = 1; k < v.length; k++) {
+        var r = v[k];
+        if (!r[0]) continue;
+        var data = {}; try { data = JSON.parse(r[8] || '{}'); } catch (x) {}
+        out.quotes.push({r: k + 1, no: s_(r[0]), type: tab === 'INVOICES' ? 'invoice' : 'quote', date: d_(r[1]), customer: s_(r[2]), project: s_(r[3]),
+          total: n_(r[4]) || 0, status: s_(r[5]), by: s_(r[6]), updated: s_(r[7]), data: data});
+      }
+    });
+    tm.docs = Date.now() - t0;
+  }
+  if (want.ask) {
+    var all = askRows_(400);
+    out.ask = all.slice(-40);
+    out.needs = all.filter(function (r) { return r.missing || /^bad/.test(r.rating) || r.status === 'error'; }).slice(-40).reverse()
+      .map(function (r) { return {id: r.id, time: r.time, who: r.who, q: r.q, missing: r.missing, rating: r.rating}; });
+    out.know = knowRows_(false).map(function (k) { k.text = String(k.text || '').slice(0, 280); return k; });
+    var seen = +(CacheService.getScriptCache().get('RELAY_SEEN') || 0);
+    out.aiOnline = seen > 0 && Date.now() - seen < 3 * 60000;
+    out.aiSeen = seen ? new Date(seen).toISOString() : '';
+    tm.ask = Date.now() - t0;
+  }
+  if (want.log) {
+    var lg = ss_().getSheetByName('APP LOG');
+    out.log = [];
+    if (lg && lg.getLastRow() > 1) {
+      var n = Math.min(40, lg.getLastRow() - 1);
+      out.log = lg.getRange(lg.getLastRow() - n + 1, 1, n, 4).getDisplayValues().reverse()
+        .filter(function (r) { return r[2] !== 'login'; })
+        .map(function (r) { return {time: r[0], who: r[1], action: r[2], details: r[3]}; });
+    }
+  }
+  tm.total = Date.now() - t0;
+  out.ms = tm;
   return out;
 }
 
@@ -366,19 +407,19 @@ function jobFields_(j) {
   var o = {};
   if (j.date !== undefined) o['date'] = toDate_(j.date);
   if (j.time !== undefined) o['time'] = clip_(j.time, 20);
-  if (j.job !== undefined) { if (JOBS.indexOf(j.job) < 0) throw new Error('Pick a job type'); o['job'] = j.job; }
+  if (j.job !== undefined) { if (JOBS.indexOf(j.job) < 0) throw bad_('Pick a job type'); o['job'] = j.job; }
   if (j.customer !== undefined) o['customer'] = clip_(j.customer, 120);
   if (j.location !== undefined) o['location'] = clip_(j.location, 160);
   if (j.units !== undefined) o['units / model'] = clip_(j.units, 160);
   if (j.tech !== undefined) o['technician'] = clip_(j.tech, 80);
-  if (j.status !== undefined) { if (STATUSES.indexOf(j.status) < 0) throw new Error('Bad status'); o['status'] = j.status; }
+  if (j.status !== undefined) { if (STATUSES.indexOf(j.status) < 0) throw bad_('Bad status'); o['status'] = j.status; }
   if (j.notes !== undefined) o['notes'] = clip_(j.notes, 500);
   return o;
 }
 
 function addJob_(req, me) {
   var j = req.job || {};
-  if (!j.date || !j.customer) throw new Error('Date and customer are needed');
+  if (!j.date || !j.customer) throw bad_('Date and customer are needed');
   return withLock_(function () {
     var T = table_('SCHEDULE');
     var row = lastRowOf_(T, col_(T, 'date')) + 1;
@@ -396,10 +437,10 @@ function updateJob_(req, me) {
   var r = +req.r, j = req.set || {};
   return withLock_(function () {
     var T = table_('SCHEDULE');
-    if (!(r >= 2 && r <= T.vals.length)) throw new Error('Job not found. Please refresh.');
+    if (!(r >= 2 && r <= T.vals.length)) throw bad_('Job not found. Please refresh.');
     var cur = T.vals[r - 1], idc = colOpt_(T, 'bot record id');
     var same = (req.id && idc >= 0) ? s_(cur[idc]) === req.id : s_(cur[col_(T, 'customer')]) === String(req.customer || '');
-    if (!same) throw new Error('This job was changed by someone else. Please refresh.');
+    if (!same) throw bad_('This job was changed by someone else. Please refresh.');
     var before = s_(cur[col_(T, 'status')]);
     writeRow_(T, r, jobFields_(j));
     var what = Object.keys(j).map(function (k) { return k + ': ' + j[k]; }).join(', ');
@@ -413,12 +454,12 @@ function stockMove_(req, me) {
   var m = req.move || {};
   var tab = m.kind === 'part' ? 'PART IN-OUT' : 'UNIT IN-OUT', list = m.kind === 'part' ? 'PARTS' : 'UNITS';
   var qty = Math.round(+m.qty);
-  if (!(qty > 0 && qty < 10000)) throw new Error('Qty must be 1 or more');
-  if (m.dir !== 'IN' && m.dir !== 'OUT') throw new Error('Choose IN or OUT');
+  if (!(qty > 0 && qty < 10000)) throw bad_('Qty must be 1 or more');
+  if (m.dir !== 'IN' && m.dir !== 'OUT') throw bad_('Choose IN or OUT');
   return withLock_(function () {
     var L = table_(list), ic = col_(L, 'item'), found = false;
     for (var i = 1; i < L.vals.length; i++) if (s_(L.vals[i][ic]) === m.item) { found = true; break; }
-    if (!found) throw new Error('Item not found in ' + list + ': ' + m.item);
+    if (!found) throw bad_('Item not found in ' + list + ': ' + m.item);
     var T = table_(tab);
     var row = lastRowOf_(T, col_(T, 'item')) + 1;
     writeRow_(T, row, {'date': toDate_(m.date || today_()), 'item': m.item, 'in / out': m.dir, 'qty': qty,
@@ -432,12 +473,12 @@ function stockMove_(req, me) {
 function payment_(req, me) {
   var p = req.pay || {};
   var amt = n_(p.amount);
-  if (!(amt > 0)) throw new Error('Amount must be more than 0');
-  if (METHODS.indexOf(p.method) < 0) throw new Error('Choose a method');
+  if (!(amt > 0)) throw bad_('Amount must be more than 0');
+  if (METHODS.indexOf(p.method) < 0) throw bad_('Choose a method');
   return withLock_(function () {
     var R = table_('RECEIVABLES'), pc = col_(R, 'customer / project'), ok = false;
     for (var i = 1; i < R.vals.length; i++) if (s_(R.vals[i][pc]) === p.project) { ok = true; break; }
-    if (!ok) throw new Error('Pick the customer / project from the list');
+    if (!ok) throw bad_('Pick the customer / project from the list');
     var T = table_('PAYMENTS');
     var row = lastRowOf_(T, col_(T, 'customer / project')) + 1;
     writeRow_(T, row, {'date': toDate_(p.date || today_()), 'customer / project': p.project, 'amount': amt, 'method': p.method,
@@ -449,18 +490,18 @@ function payment_(req, me) {
 
 function newReceivable_(req, me) {
   var x = req.rec || {};
-  if (!x.project) throw new Error('Customer / project is needed');
+  if (!x.project) throw bad_('Customer / project is needed');
   var bal = n_(x.balance);
-  if (!(bal > 0)) throw new Error('Balance must be more than 0');
+  if (!(bal > 0)) throw bad_('Balance must be more than 0');
   return withLock_(function () {
     var T = table_('RECEIVABLES'), pc = col_(T, 'customer / project'), totalRow = -1, maxNo = 0;
     for (var i = 1; i < T.vals.length; i++) {
       var v = s_(T.vals[i][pc]);
       if (/^total/i.test(v)) { totalRow = i + 1; break; }
-      if (v === x.project) throw new Error('This name already exists. Use a different name (add P.O number).');
+      if (v === x.project) throw bad_('This name already exists. Use a different name (add P.O number).');
       maxNo = Math.max(maxNo, n_(T.vals[i][col_(T, 'no.')]) || 0);
     }
-    if (totalRow < 3) throw new Error('TOTAL row not found in RECEIVABLES');
+    if (totalRow < 3) throw bad_('TOTAL row not found in RECEIVABLES');
     // insert inside the SUM range (above the blank spare row before TOTAL) so totals include it
     var at = totalRow - 1;
     T.sh.insertRowBefore(at);
@@ -482,10 +523,10 @@ function cleaningDone_(req, me) {
   var r = +req.r;
   return withLock_(function () {
     var T = table_('CUSTOMERS');
-    if (!(r >= 2 && r <= T.vals.length)) throw new Error('Customer row not found. Please refresh.');
+    if (!(r >= 2 && r <= T.vals.length)) throw bad_('Customer row not found. Please refresh.');
     var cur = T.vals[r - 1];
     if (s_(cur[col_(T, 'customer')]) !== String(req.customer || '') || s_(cur[col_(T, 'indoor sn')]) !== String(req.isn || ''))
-      throw new Error('Customer list changed. Please refresh.');
+      throw bad_('Customer list changed. Please refresh.');
     T.sh.getRange(r, col_(T, 'last cleaning') + 1).setValue(toDate_(req.date || today_()));
     ensureNextCleaning_(T, r);
     done_(me, 'Cleaning done', s_(cur[col_(T, 'customer')]) + ' · ' + s_(cur[col_(T, 'model')]) + ' · SN ' + (req.isn || '-') + ' · ' + (req.date || today_()), '🧽');
@@ -503,7 +544,7 @@ function ensureNextCleaning_(T, r) {
 
 function addInstall_(req, me) {
   var x = req.inst || {};
-  if (!x.customer || !x.model) throw new Error('Customer and model are needed');
+  if (!x.customer || !x.model) throw bad_('Customer and model are needed');
   return withLock_(function () {
     var T = table_('CUSTOMERS');
     var row = lastRowOf_(T, col_(T, 'customer')) + 1;
@@ -537,8 +578,8 @@ function quotesSheet_(type) {
 
 function saveQuote_(req, me) {
   var q = req.quote || {};
-  if (!q.customer) throw new Error('Customer name is needed');
-  if (!(q.items || []).length) throw new Error('Add at least one item');
+  if (!q.customer) throw bad_('Customer name is needed');
+  if (!(q.items || []).length) throw bad_('Add at least one item');
   var inv = q.type === 'invoice', pre = inv ? 'INV' : 'Q';
   return withLock_(function () {
     var sh = quotesSheet_(q.type), last = sh.getLastRow();
@@ -546,7 +587,7 @@ function saveQuote_(req, me) {
     var row, no = q.no;
     if (no) {
       var k = nos.indexOf(no);
-      if (k < 0) throw new Error('Quote not found: ' + no);
+      if (k < 0) throw bad_('Quote not found: ' + no);
       row = k + 2;
     } else {
       var yy = Utilities.formatDate(new Date(), TZ, 'yyyy'), max = 0;
@@ -556,7 +597,7 @@ function saveQuote_(req, me) {
     }
     q.no = no;
     var data = JSON.stringify(q);
-    if (data.length > 45000) throw new Error('Quote is too long');
+    if (data.length > 45000) throw bad_('Quote is too long');
     var prev = row <= last ? String(sh.getRange(row, 6).getValue()) : '';
     sh.getRange(row, 1, 1, 9).setValues([[no, toDate_(q.date || today_()), clip_(q.customer, 120), clip_(q.project, 160), +q.total || 0,
       q.status || prev || (inv ? 'Unpaid' : 'Draft'), q.by || me.name, Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm') + ' ' + me.name, data]]);
@@ -568,12 +609,12 @@ function saveQuote_(req, me) {
 function quoteStatus_(req, me) {
   var inv = /^INV-/.test(String(req.no));
   var ok = inv ? ['Unpaid', 'Partially paid', 'Paid', 'Cancelled'] : ['Draft', 'Sent', 'Accepted', 'Lost'];
-  if (ok.indexOf(req.status) < 0) throw new Error('Bad status');
+  if (ok.indexOf(req.status) < 0) throw bad_('Bad status');
   return withLock_(function () {
     var sh = quotesSheet_(inv ? 'invoice' : 'quote'), last = sh.getLastRow();
     var nos = last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
     var k = nos.indexOf(req.no);
-    if (k < 0) throw new Error('Quote not found');
+    if (k < 0) throw bad_('Quote not found');
     sh.getRange(k + 2, 6).setValue(req.status);
     done_(me, (inv ? 'Invoice ' : 'Quotation ') + req.status, req.no + ' · ' + sh.getRange(k + 2, 3).getValue(), req.status === 'Accepted' ? '🎉' : '📄');
     return {ok: true};
@@ -605,10 +646,11 @@ function askRows_(n, ids) {
 }
 function ask_(req, me) {
   var q = String(req.q || '').trim();
-  if (q.length < 2) throw new Error('Type your question');
+  if (q.length < 2) throw bad_('Type your question');
   return withLock_(function () {
     var sh = askSheet_(), id = 'A' + Utilities.formatDate(new Date(), TZ, 'yyMMddHHmmss') + Math.floor(Math.random() * 90 + 10);
     sh.appendRow([id, new Date(), me.name, clip_(q, 2000), 'waiting', '', '']);
+    CacheService.getScriptCache().put('ASK_PENDING', '1', 21600);
     return {ok: true, id: id};
   });
 }
@@ -617,7 +659,7 @@ function askRate_(req, me) {
     var sh = askSheet_(), last = sh.getLastRow();
     var ids = last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
     var k = ids.indexOf(String(req.id));
-    if (k < 0) throw new Error('Not found');
+    if (k < 0) throw bad_('Not found');
     var v = req.good ? 'good' : 'bad: ' + clip_(req.why || '', 200) + ' (' + me.name + ')';
     sh.getRange(k + 2, 8).setValue(v);
     if (!req.good) log_(me.name, 'GPT answer marked wrong', sh.getRange(k + 2, 4).getValue() + (req.why ? ' — ' + req.why : ''));
@@ -626,7 +668,7 @@ function askRate_(req, me) {
 }
 function askGet_(req, me) {
   var ids = (req.ids || []).map(String).slice(0, 20);
-  var seen = +(PropertiesService.getScriptProperties().getProperty('RELAY_SEEN') || 0);
+  var seen = +(CacheService.getScriptCache().get('RELAY_SEEN') || 0);
   return {ok: true, items: askRows_(0, ids), aiOnline: seen > 0 && Date.now() - seen < 3 * 60000};
 }
 
@@ -659,20 +701,20 @@ function kFolder_() {
 function kAdd_(me, title, type, text, url) {
   var sh = kSheet_(), id = 'K' + Utilities.formatDate(new Date(), TZ, 'yyMMddHHmmss') + Math.floor(Math.random() * 90 + 10);
   sh.appendRow([id, new Date(), me.name, clip_(title, 200), type, String(text || '').slice(0, 45000), url || '', 'active']);
-  PropertiesService.getScriptProperties().setProperty('K_VER', String(Date.now()));
+  bumpKVer_();
   return id;
 }
 function kNote_(req, me) {
   var t = String(req.text || '').trim();
-  if (t.length < 3) throw new Error('Write something first');
+  if (t.length < 3) throw bad_('Write something first');
   var id = kAdd_(me, req.title || t.slice(0, 60), 'Note', t, '');
   done_(me, 'Material added', (req.title || t.slice(0, 60)), '📚');
   return {ok: true, id: id};
 }
 function kUpload_(req, me) {
-  if (!req.b64 || !req.name) throw new Error('No file');
+  if (!req.b64 || !req.name) throw bad_('No file');
   var bytes = Utilities.base64Decode(req.b64);
-  if (bytes.length > 15 * 1024 * 1024) throw new Error('File is too big (max 15 MB)');
+  if (bytes.length > 15 * 1024 * 1024) throw bad_('File is too big (max 15 MB)');
   var mime = String(req.mime || 'application/octet-stream');
   var blob = Utilities.newBlob(bytes, mime, String(req.name).slice(0, 120));
   var file = kFolder_().createFile(blob);
@@ -710,9 +752,9 @@ function kHide_(req, me) {
     var sh = kSheet_(), last = sh.getLastRow();
     var ids = last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
     var k = ids.indexOf(String(req.id));
-    if (k < 0) throw new Error('Not found');
+    if (k < 0) throw bad_('Not found');
     sh.getRange(k + 2, 8).setValue('hidden');
-    PropertiesService.getScriptProperties().setProperty('K_VER', String(Date.now()));
+    bumpKVer_();
     done_(me, 'Material removed', sh.getRange(k + 2, 4).getValue(), '🗑️');
     return {ok: true};
   });
@@ -720,7 +762,8 @@ function kHide_(req, me) {
 
 // ───────────────────────── relay (Sir Kim's PC) ─────────────────────────
 function relay_(req) {
-  var p = PropertiesService.getScriptProperties(), key = p.getProperty('RELAY_KEY');
+  var p = PropertiesService.getScriptProperties(), kc = CacheService.getScriptCache(), key = kc.get('RELAY_KEY');
+  if (key === null) { key = p.getProperty('RELAY_KEY'); if (key) kc.put('RELAY_KEY', key, 21600); }
   if (req.a === 'relaySetKey') {  // once only, Evan sets it
     if (key) return {ok: false, error: 'already set'};
     if (!req.key || String(req.key).length < 32) return {ok: false, error: 'short'};
@@ -728,8 +771,15 @@ function relay_(req) {
     return {ok: true};
   }
   if (!key || req.key !== key) return {ok: false, error: 'bad key'};
-  p.setProperty('RELAY_SEEN', String(Date.now()));
+  var cache = CacheService.getScriptCache();
+  cache.put('RELAY_SEEN', String(Date.now()), 21600);
   if (req.a === 'relayPoll') {
+    // fast path: nothing asked since the last full check → do not open the sheet
+    var lastScan = +(cache.get('ASK_SCAN') || 0);
+    if (cache.get('ASK_PENDING') !== '1' && Date.now() - lastScan < 10 * 60000) {
+      return {ok: true, questions: [], dataVer: dataVer_(), now: Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm (EEE)')};
+    }
+    cache.put('ASK_SCAN', String(Date.now()), 21600);
     return withLock_(function () {
       var sh = askSheet_(), last = sh.getLastRow(), outQ = [];
       if (last >= 2) {
@@ -742,6 +792,10 @@ function relay_(req) {
             outQ.push({id: String(v[i][0]), who: s_(v[i][2]), q: s_(v[i][3]), time: v[i][1] instanceof Date ? Utilities.formatDate(v[i][1], TZ, 'yyyy-MM-dd HH:mm') : ''});
           }
         }
+        var stillOpen = v.some(function (r) { return /^(waiting|thinking@)/.test(String(r[4])); });
+        if (stillOpen || outQ.length) cache.put('ASK_PENDING', '1', 21600); else cache.remove('ASK_PENDING');
+      } else {
+        cache.remove('ASK_PENDING');
       }
       return {ok: true, questions: outQ, dataVer: dataVer_(), now: Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm (EEE)')};
     });
@@ -790,5 +844,12 @@ function relay_(req) {
 }
 function dataVer_() {
   // changes whenever materials change; sheet edits are picked up by the PC every 10 minutes anyway
-  return PropertiesService.getScriptProperties().getProperty('K_VER') || '0';
+  var c = CacheService.getScriptCache(), v = c.get('K_VER');
+  if (v === null) { v = PropertiesService.getScriptProperties().getProperty('K_VER') || '0'; c.put('K_VER', v, 21600); }
+  return v;
+}
+function bumpKVer_() {
+  var v = String(Date.now());
+  PropertiesService.getScriptProperties().setProperty('K_VER', v);
+  CacheService.getScriptCache().put('K_VER', v, 21600);
 }

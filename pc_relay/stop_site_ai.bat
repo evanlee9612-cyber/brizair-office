@@ -1,6 +1,7 @@
 @echo off
+rem Turn OFF website GPT answers
+schtasks /End /TN "BrizairSiteAI" >nul 2>nul
 schtasks /Delete /F /TN "BrizairSiteAI" >nul 2>nul
-taskkill /F /FI "WINDOWTITLE eq ask_relay*" >nul 2>nul
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr 127.0.0.1:47322') do taskkill /F /PID %%a >nul 2>nul
-echo Website GPT answers are OFF.
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 47322 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
+echo Website GPT answers are OFF. (install_site_ai.bat turns it on again)
 pause
