@@ -35,7 +35,7 @@
     'Zero stock': '재고 0', 'Nothing found': '찾는 게 없어요', 'In stock now': '지금 재고', 'Type': '종류', 'SRP': '손님가', 'Cost': '원가',
     'Aircons on hand': '에어컨 재고', 'Parts on hand': '부품 재고', 'Front panels': '패널', 'Value at cost': '원가 합계', 'Value at SRP': '손님가 합계',
     'Orders (PO)': '발주 (PO)', 'Orders (PO) & suppliers': '발주(PO)·공급처', 'Order (PO)': '발주 (PO)', 'Other': '기타', 'New part': '새 부품', 'New model': '새 모델',
-    'Count sheet': '실사표 인쇄', 'Add': '추가', 'Our items': '우리 물건', 'Customer units here': '맡아 둔 손님 기계', 'Show done (sold / returned)': '끝난 것도 보기 (판매·반납)',
+    'Count sheet': '실사표 인쇄', 'Add': '추가', 'Our items': '우리 물건', 'Customer units here': '맡아 둔 손님 기계', 'Not our stock (customer / on hold)': '우리 재고 아님 (손님·보류)', 'Not our stock — kept here, not counted': '우리 재고 아님 — 보관만, 재고에 안 셈', 'Belongs to customers or the project on hold. Not in our items or value. Do not sell.': '손님 기계나 보류 중인 프로젝트 물건이에요. 우리 재고 수량·금액에 안 들어가요. 팔면 안 돼요.', 'Not our stock': '우리 재고 아님', 'Show done (sold / returned)': '끝난 것도 보기 (판매·반납)',
     'Not in the LG lists: other brands, LG appliances, second-hand units, indoor / outdoor only, water pumps, other materials, and customer units we keep for repair. Saved in the sheet tab OTHER STOCK.': 'LG 목록에 없는 것: 다른 브랜드, LG 가전, 중고 기계, 실내기·실외기만, 배수 펌프, 기타 자재, 수리하려고 맡아 둔 손님 기계. 시트 OTHER STOCK 탭에 저장돼요.',
     'Other brand aircon': '다른 브랜드 에어컨', 'LG appliance': 'LG 가전', 'Second-hand unit': '중고 기계', 'Indoor / outdoor only': '실내기·실외기만', 'Water pump (Hisys)': '배수 펌프 (Hisys)',
     'Other materials': '기타 자재', 'Customer unit (repair)': '손님 기계 (수리)', 'Project on hold': '보류된 프로젝트', 'For repair': '수리 중', 'On hold': '보류',
