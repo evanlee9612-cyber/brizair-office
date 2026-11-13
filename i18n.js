@@ -34,6 +34,33 @@
     'Aircon units': '에어컨 유닛', 'Parts': '부품', 'LG report': 'LG 보고', 'In / Out': '입출고', 'All': '전체', 'In stock': '재고 있음',
     'Zero stock': '재고 0', 'Nothing found': '찾는 게 없어요', 'In stock now': '지금 재고', 'Type': '종류', 'SRP': '손님가', 'Cost': '원가',
     'Aircons on hand': '에어컨 재고', 'Parts on hand': '부품 재고', 'Front panels': '패널', 'Value at cost': '원가 합계', 'Value at SRP': '손님가 합계',
+    'Orders (PO)': '발주 (PO)', 'Orders (PO) & suppliers': '발주(PO)·공급처', 'Order (PO)': '발주 (PO)', 'Other': '기타', 'New part': '새 부품', 'New model': '새 모델',
+    'Count sheet': '실사표 인쇄', 'Add': '추가', 'Our items': '우리 물건', 'Customer units here': '맡아 둔 손님 기계', 'Show done (sold / returned)': '끝난 것도 보기 (판매·반납)',
+    'Not in the LG lists: other brands, LG appliances, second-hand units, indoor / outdoor only, water pumps, other materials, and customer units we keep for repair. Saved in the sheet tab OTHER STOCK.': 'LG 목록에 없는 것: 다른 브랜드, LG 가전, 중고 기계, 실내기·실외기만, 배수 펌프, 기타 자재, 수리하려고 맡아 둔 손님 기계. 시트 OTHER STOCK 탭에 저장돼요.',
+    'Other brand aircon': '다른 브랜드 에어컨', 'LG appliance': 'LG 가전', 'Second-hand unit': '중고 기계', 'Indoor / outdoor only': '실내기·실외기만', 'Water pump (Hisys)': '배수 펌프 (Hisys)',
+    'Other materials': '기타 자재', 'Customer unit (repair)': '손님 기계 (수리)', 'Project on hold': '보류된 프로젝트', 'For repair': '수리 중', 'On hold': '보류',
+    'Add other item': '기타 물건 추가', 'Category': '분류', 'Item / model *': '물건 / 모델 *', 'Serial #': '시리얼 번호', 'Cost each ₱': '원가 (1개) ₱',
+    'Missing / defective parts': '분실·불량 부품', 'Report': '기록', 'No open missing / defective parts': '확인 중인 분실·불량 부품 없음', 'Missing': '분실', 'Defective': '불량', 'Over': '초과',
+    'Open': '확인 중', 'Deducted': '재고에서 뺌', 'Found': '찾음', 'Missing / defective part': '분실·불량 부품', 'Report missing / defective part': '분실·불량 부품 기록',
+    'Part #': '부품번호', 'Date found': '발견한 날', 'Since': '언제부터', 'Deducted = taken out of the stock count · Found = it was there after all': '재고에서 뺌 = 재고 수량에서 뺐음 · 찾음 = 알고 보니 있었음',
+    'Also take it OUT of stock now (if it is in the parts list)': '지금 재고에서 OUT도 하기 (부품 목록에 있으면)',
+    'New order line': '새 발주 줄', 'To order (planned)': '발주할 것 (예정)', 'Ordered, not delivered': '발주했는데 안 들어옴', 'To order': '발주할 것', 'Waiting delivery': '입고 대기',
+    'Nothing planned': '예정된 발주 없음', 'Nothing yet': '아직 없음', 'Nothing waiting for delivery': '입고 기다리는 것 없음', 'Suppliers': '공급처', 'No suppliers yet': '공급처 없음',
+    'Material prices: KNP vs Hisys': '자재 단가: KNP vs Hisys', 'No PO #': 'PO 번호 없음', 'No project': '현장 없음', 'Kind': '종류', 'Item *': '품목 *', 'Rate each ₱ (cost)': '원가 (1개) ₱',
+    'For (customer / project)': '손님 / 현장', 'PO #': 'PO 번호', 'Planned': '발주 예정', 'Ordered': '발주함', 'Received': '입고됨', 'Order line': '발주 줄', 'Rate': '원가', 'For': '손님·현장',
+    'Delivery came?': '물건이 들어왔나요?', 'How many arrived?': '몇 개 들어왔나요?', 'Edit order line': '발주 줄 수정',
+    'No PO # yet = “To order”. With a PO # = “Waiting delivery”. When it arrives, open it → Received: it goes IN to stock by itself.': 'PO 번호가 없으면 “발주할 것”, 있으면 “입고 대기”예요. 물건이 오면 열어서 “입고됨”을 누르면 재고에 자동으로 IN 돼요.',
+    'In the stock list ✓ — it will go IN to stock when received': '재고 목록에 있어요 ✓ — 입고하면 재고에 자동으로 IN 돼요',
+    'Received ✓ — not in the stock list, so stock did not change. Add it with “New model / New part”.': '입고 ✓ — 재고 목록에 없어서 재고는 그대로예요. “새 모델 / 새 부품”으로 먼저 추가하세요.',
+    'Write the item': '품목을 쓰세요', 'Write the item / model': '물건 / 모델을 쓰세요', 'Choose the part': '부품을 고르세요', 'Write the supplier name': '공급처 이름을 쓰세요',
+    'Saved. Not in the parts list, so stock did not change.': '저장했어요. 부품 목록에 없어서 재고는 그대로예요.', 'Add supplier': '공급처 추가', 'Name *': '이름 *', 'Supplies': '취급 품목',
+    'New part in the list': '부품 목록에 새 부품', 'New model in the list': '모델 목록에 새 모델', 'Part name *': '부품 이름 *', 'Must be different from every name in the list.': '목록에 있는 이름과 달라야 해요.',
+    'Customer price ₱': '손님가 ₱', 'LG cost ₱': 'LG 원가 ₱', 'Cost ₱': '원가 ₱', 'Write the part name': '부품 이름을 쓰세요', 'Write the model': '모델을 쓰세요', 'Already in the list': '이미 목록에 있어요',
+    'It starts with 0 in stock. When it arrives, record IN (or receive its order line).': '재고 0으로 시작해요. 물건이 오면 IN을 기록하거나 발주 줄에서 “입고됨”을 누르세요.',
+    'Sold to a project but not installed yet → “Reserve for a project”.': '프로젝트에 팔았는데 아직 설치 전 → “프로젝트용 예약”.',
+    'Other = other brands, appliances, second-hand and customer units for repair.': '기타 = 다른 브랜드, 가전, 중고, 수리 맡은 손님 기계.',
+    'To order = planned (Excel “FOR PO”). Add the PO # when you order it.': '발주할 것 = 예정 (엑셀 “FOR PO”). 발주하면 PO 번호를 넣으세요.',
+    'Delivery came → open the line → Received. Units / parts go IN to stock by itself.': '물건이 오면 → 줄을 열고 → 입고됨. 유닛·부품이 재고에 자동으로 IN 돼요.',
     'After current projects': '진행 중 프로젝트 끝난 뒤', 'Reserve for a project': '프로젝트용 예약', 'Reserve': '예약',
     'Reserved = sold to a project but not installed yet (still in our stock). Values at cost.': '예약 = 프로젝트에 팔았지만 아직 설치 안 한 것 (아직 우리 창고에 있음). 금액은 원가 기준이에요.',
     'On hand now': '지금 창고 재고', 'Reserved (not installed)': '예약 (설치 전)', 'Free after projects': '프로젝트 끝난 뒤 남는 재고',
@@ -190,7 +217,9 @@
     [/^In stock now: (\S+) · already reserved: (\d+)$/, '지금 재고: $1 · 이미 예약: $2'], [/^In stock now: (.+)$/, '지금 재고: $1'],
     [/^Reserved (\d+) × (.+) ✓$/, '예약 ✓ $1 × $2'], [/^Installed ✓ (\d+) × (.+) went OUT of stock$/, '설치 ✓ $1 × $2 재고에서 나갔어요'],
     [/^How many: 1 to (\d+)$/, '수량: 1~$1'], [/^Cancel the reservation of (\d+) × (.+)\? \(stock does not change\)$/, '$1 × $2 예약을 취소할까요? (재고는 그대로예요)'],
-    [/^(\d+) not in stock$/, '$1개 재고 없음'], [/^Old “valid for”: (.+)$/, '예전 유효 기간: $1'], [/^(\d+) \+ (\d+) panels?$/, '$1 + 패널 $2'], [/^Total on hand: ?$/, '전체 재고: '], [/^(\d+) pcs have no price in the sheet \(not counted\)$/, '$1개는 시트에 가격이 없어 합계에서 빠졌어요'], [/^\+(\d+) more$/, '+$1건 더'],
+    [/^(\d+) not in stock$/, '$1개 재고 없음'], [/^(Show|Hide) history \((\d+) deducted \/ found\)$/, (m, a, n) => (a === 'Show' ? '지난 기록 보기 ' : '지난 기록 숨기기 ') + '(' + n + ')'],
+    [/^(Missing|Defective|Over) (\d+)$/, (m, a, n) => ({Missing: '분실', Defective: '불량', Over: '초과'}[a]) + ' ' + n], [/^(\d+) of (\d+) × (.+)$/, '$1/$2 남음 × $3'],
+    [/^Received ✓ (\d+) × (.+)$/, '입고 ✓ $1 × $2'], [/^Added ✓ (.+)$/, '추가 ✓ $1'], [/^(.*)Green = cheaper\. Edit in the sheet tab MATERIAL PRICES\.$/, '$1초록색 = 더 쌈. 수정은 시트 MATERIAL PRICES 탭에서.'], [/^Old “valid for”: (.+)$/, '예전 유효 기간: $1'], [/^(\d+) \+ (\d+) panels?$/, '$1 + 패널 $2'], [/^Total on hand: ?$/, '전체 재고: '], [/^(\d+) pcs have no price in the sheet \(not counted\)$/, '$1개는 시트에 가격이 없어 합계에서 빠졌어요'], [/^\+(\d+) more$/, '+$1건 더'],
     [/^Search (.+)…$/, '검색…'], [/^Logged in as ?$/, '로그인: '], [/^Saved ✓ (.+)$/, '저장 ✓ $1'], [/^Status: (.+)$/, '상태: $1'],
     [/^Could not load: (.+)$/, '불러오기 실패: $1'], [/^Choose the (model|part) from the list$/, '목록에서 골라 주세요'],
     [/^Stock is only (-?\d+)\. Record OUT (\d+) anyway\?$/, '재고가 $1개뿐이에요. 그래도 OUT $2개를 기록할까요?'],
@@ -202,7 +231,7 @@
     [/^GPT reached its ChatGPT usage limit\. Please ask again after (.+)\.$/, 'GPT 사용 한도에 걸렸어요. $1 이후에 다시 물어봐 주세요.'], [/^GPT reached its ChatGPT usage limit\. Please ask again later\.$/, 'GPT 사용 한도에 걸렸어요. 잠시 뒤에 다시 물어봐 주세요.'], [/^Waiting — Sir Kim's PC is offline\. It will answer when the PC is on\.$/, '대기 중 — 대표님 컴퓨터가 꺼져 있어요. 켜지면 답해요.'], [/^No jobs\. ?$/, '일정 없음. '], [/^\+ Add a job on this day$/, '+ 이날 일정 추가']
   ];
   const FRAG = [[/\bInstalled (?=[A-Z—])/g, '설치 '], [/ · Last cleaning /g, ' · 마지막 청소 '], [/ · Next$/g, ' · 다음'], [/^Next$/g, '다음'],
-    [/\bIndoor SN /g, '실내기 SN '], [/\bOutdoor SN /g, '실외기 SN '], [/ in stock now\b/g, ' 지금 재고'], [/\bstock (\d)/g, '재고 $1'], [/ · LG ₱/g, ' · LG 원가 ₱'], [/ · cost ₱/g, ' · 원가 ₱'], [/ · reserved (\d+)/g, ' · 예약 $1'], [/ each$/g, ' (1개당)'], [/ — still (Scheduled|Confirmed)$/g, ' — 아직 $1'], [/ · due /g, ' · 기한 '], [/ · sent /g, ' · 보냄 '], [/^due /g, '기한 ']];
+    [/\bIndoor SN /g, '실내기 SN '], [/\bOutdoor SN /g, '실외기 SN '], [/ in stock now\b/g, ' 지금 재고'], [/\bstock (\d)/g, '재고 $1'], [/ · LG ₱/g, ' · LG 원가 ₱'], [/ · cost ₱/g, ' · 원가 ₱'], [/ · reserved (\d+)/g, ' · 예약 $1'], [/ each · /g, ' (1개당) · '], [/ · since /g, ' · 언제부터 '], [/^since /g, '언제부터 '], [/ each$/g, ' (1개당)'], [/ — still (Scheduled|Confirmed)$/g, ' — 아직 $1'], [/ · due /g, ' · 기한 '], [/ · sent /g, ' · 보냄 '], [/^due /g, '기한 ']];
 
   let lang = 'en';
   try { lang = localStorage.getItem('brz_lang') || ''; } catch (e) { lang = ''; }
