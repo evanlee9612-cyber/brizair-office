@@ -197,7 +197,7 @@
 
   // ───────── shell ─────────
   const NAV = [
-    ['home', 'Home', 'home'], ['ask', 'Ask GPT', 'chat'], ['schedule', 'Schedule', 'cal'], ['stock', 'Stock', 'box'], ['customers', 'Customers', 'users'],
+    ['home', 'Home', 'home'], ['ask', 'Ask GPT', 'chat'], ['schedule', 'Schedule', 'cal'], ['stock', 'Stock', 'box'], ['orders', 'Orders (PO)', 'inbox'], ['customers', 'Customers', 'users'],
     ['money', 'Money', 'peso'], ['materials', 'Materials for AI', 'book'], ['quotes', 'Quotes & Invoices', 'doc'], ['report', 'LG Monthly Report', 'chart'], ['activity', 'Activity', 'log']
   ];
   function shell() {
@@ -242,7 +242,7 @@
     S.route = name;
     document.body.dataset.route = name;
     const tabFor = {cust: 'customers', materials: 'ask'}[name] || name;
-    $$('.me').forEach(b => b.classList.toggle('on', ['more', 'money', 'quotes', 'quote', 'report', 'activity', 'help'].includes(name)));
+    $$('.me').forEach(b => b.classList.toggle('on', ['more', 'money', 'quotes', 'quote', 'report', 'activity', 'help', 'orders'].includes(name)));
     $$('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.go === tabFor));
     $$('.side button[data-go]').forEach(b => b.classList.toggle('on', b.dataset.go === ({cust: 'customers', quote: 'quotes'}[name] || name)));
     const main = $('#main');
@@ -454,6 +454,7 @@
 
   // stock
   VIEWS.stock = () => {
+    if (S.stockKind === 'other') return otherView();
     const kind = S.stockKind, q = lc(S.q.stock);
     let list = stockList(kind).slice();
     if (S.stockFilter === 'in') list = list.filter(x => x.now > 0);
@@ -464,10 +465,12 @@
     const all = stockList(kind), sm = stockSum(all, kind), unit = kind === 'unit';
     return `
       <div class="row between wrap" style="margin-bottom:12px">
-        <div class="seg"><button class="${kind === 'unit' ? 'on' : ''}" data-act="stockKind" data-k="unit">Aircon units</button><button class="${kind === 'part' ? 'on' : ''}" data-act="stockKind" data-k="part">Parts</button></div>
+        ${stockSeg(kind)}
         <div class="row"><button class="btn sm" data-go="report">${ic('chart')} LG report</button>
         <button class="btn primary sm" data-act="move" data-kind="${kind}">${ic('plus')} In / Out</button></div>
       </div>
+      <div class="btns" style="margin:-2px 0 12px"><button class="btn sm" data-act="itemNew" data-kind="${kind}">${ic('plus')} ${kind === 'part' ? 'New part' : 'New model'}</button>
+        <button class="btn sm" data-act="countSheet" data-kind="${kind}">${ic('print')} Count sheet</button><button class="btn sm" data-go="orders">${ic('inbox')} Orders (PO)</button></div>
       <div class="search">${ic('search')}<input id="qstock" placeholder="Search ${kind === 'part' ? 'part, part no., model' : 'model, type, hp'}…" value="${esc(S.q.stock || '')}" autocomplete="off"></div>
       <div class="chips" style="margin-bottom:12px">
         ${[['all', 'All ' + all.length], ['in', 'In stock'], ['zero', 'Zero stock']].map(c => `<button class="chip ${S.stockFilter === c[0] ? 'on' : ''}" data-act="stockFilter" data-f="${c[0]}">${c[1]}</button>`).join('')}
@@ -480,7 +483,7 @@
       </div>
       ${unit && sm.panels ? '<p class="muted small" style="margin:-4px 0 6px">Values include front panels.</p>' : ''}
       ${sm.noPrice ? `<p class="muted small" style="margin:-2px 0 10px">${sm.noPrice} pcs have no price in the sheet (not counted)</p>` : ''}
-      ${unit ? resCardHtml(all, sm) : ''}
+      ${unit ? resCardHtml(all, sm) : issuesCardHtml()}
       <div id="stockList">${stockGroupsHtml(groups, kind)}</div>`;
   };
   function resCardHtml(all, sm) {
@@ -508,6 +511,168 @@
       ${open.length ? Array.from(groups).map(([g, xs]) => `<h2 class="small" style="font-size:14px;color:var(--ink-2);margin:10px 0 2px">${esc(g)}</h2><div class="list">${xs.map(rowHtml).join('')}</div>`).join('')
         : '<div class="empty">No reserved units</div>'}</div>`;
   }
+  // ───────── from Ladie's Excel: other stock, missing parts, orders (PO), suppliers ─────────
+  const OTHER_CATS = ['Other brand aircon', 'LG appliance', 'Second-hand unit', 'Indoor / outdoor only', 'Water pump (Hisys)', 'Other materials', 'Customer unit (repair)', 'Project on hold'];
+  const NOT_OURS = ['Customer unit (repair)', 'Project on hold'];
+  const OTHER_ST = ['In stock', 'For repair', 'On hold', 'Done'];
+  const ISSUE_T = ['Missing', 'Defective', 'Over'], ISSUE_ST = ['Open', 'Deducted', 'Found'];
+  const ORDER_ST = ['Planned', 'Ordered', 'Received', 'Cancelled'];
+  const stockSeg = kind => `<div class="seg"><button class="${kind === 'unit' ? 'on' : ''}" data-act="stockKind" data-k="unit">Aircon units</button><button class="${kind === 'part' ? 'on' : ''}" data-act="stockKind" data-k="part">Parts</button><button class="${kind === 'other' ? 'on' : ''}" data-act="stockKind" data-k="other">Other</button></div>`;
+  const findRec = (k, r) => (D()[k] || []).find(x => x.r === +r);
+  const num = v => (v === '' || v == null || isNaN(+String(v).replace(/,/g, ''))) ? '' : +String(v).replace(/,/g, '');
+
+  function otherView() {
+    const all = D().other || [];
+    const live = all.filter(x => x.status !== 'Done'), ours = live.filter(x => !NOT_OURS.includes(x.cat));
+    const pcs = ours.reduce((a, x) => a + (+x.qty || 0), 0), cost = ours.reduce((a, x) => a + (+x.qty || 0) * (+x.cost || 0), 0), sell = ours.reduce((a, x) => a + (+x.qty || 0) * (+x.srp || 0), 0);
+    const cust = live.filter(x => NOT_OURS.includes(x.cat)).reduce((a, x) => a + (+x.qty || 0), 0);
+    return `
+      <div class="row between wrap" style="margin-bottom:12px">${stockSeg('other')}
+        <button class="btn primary sm" data-act="otherEdit">${ic('plus')} Add</button></div>
+      <p class="muted small" style="margin-top:0">Not in the LG lists: other brands, LG appliances, second-hand units, indoor / outdoor only, water pumps, other materials, and customer units we keep for repair. Saved in the sheet tab OTHER STOCK.</p>
+      <div class="search">${ic('search')}<input id="qstock" placeholder="Search model, serial, customer…" value="${esc(S.q.stock || '')}" autocomplete="off"></div>
+      <div class="stats">
+        <div class="stat"><span>Our items</span><b>${pcs}</b></div>
+        <div class="stat"><span>Value at cost</span><b style="font-size:20px">${peso(cost, 0)}</b></div>
+        <div class="stat"><span>Value at SRP</span><b style="font-size:20px">${peso(sell, 0)}</b></div>
+        <div class="stat"><span>Customer units here</span><b>${cust}</b></div>
+      </div>
+      <label class="chip ${S.otherDone ? 'on' : ''}" style="cursor:pointer;margin-bottom:12px;display:inline-flex"><input type="checkbox" data-act="otherDone" ${S.otherDone ? 'checked' : ''} style="display:none">Show done (sold / returned)</label>
+      <div id="otherList">${otherListHtml()}</div>`;
+  }
+  function otherListHtml() {
+    const all = D().other || [], q = lc(S.q.stock || '');
+    let list = all.filter(x => S.otherDone || x.status !== 'Done');
+    if (q) list = list.filter(x => lc([x.cat, x.item, x.desc, x.sn, x.loc, x.cust, x.notes].join(' ')).includes(q));
+    const cats = OTHER_CATS.concat(Array.from(new Set(all.map(x => x.cat).filter(c => c && !OTHER_CATS.includes(c)))));
+    return `${cats.map(c => { const xs = list.filter(x => (x.cat || 'Other materials') === c); return xs.length ? `<div class="card"><div class="card-h"><h2 class="small" style="font-size:14px;color:var(--ink-2)">${esc(c)}</h2><span class="muted small">${xs.length}</span></div><div class="list">
+        ${xs.map(x => `<button class="item" data-act="otherEdit" data-r="${x.r}"><span class="grow"><div class="t clip">${esc(x.item)}${x.status && x.status !== 'In stock' ? ` <span class="pill ${x.status === 'Done' ? 'p-Done' : 'p-PARTIAL'}">${esc(x.status)}</span>` : ''}</div>
+          <div class="s clip">${esc([x.desc, x.cust, x.sn ? 'SN ' + x.sn : '', x.loc, x.cost ? 'cost ' + peso(x.cost, 0) : '', x.srp ? 'SRP ' + peso(x.srp, 0) : '', x.notes].filter(Boolean).join(' · '))}</div></span>
+          <span class="qty ${+x.qty > 0 ? 'has' : 'zero'}">${x.qty ?? ''}</span></button>`).join('')}</div></div>` : ''; }).join('') || '<div class="card"><div class="empty">Nothing found</div></div>'}`;
+  }
+  function supForm(x) {
+    x = x || {};
+    return `<form id="frec">${field('Name *', `<input name="name" value="${esc(x.name || '')}">`)}
+      ${field('Supplies', `<input name="supplies" value="${esc(x.supplies || '')}" placeholder="e.g. LG units, parts, copper tubes">`)}
+      <div class="f2">${field('Contact person', `<input name="contact" value="${esc(x.contact || '')}">`)}${field('Phone', `<input name="phone" inputmode="tel" value="${esc(x.phone || '')}">`)}</div>
+      ${field('Email', `<input name="email" inputmode="email" value="${esc(x.email || '')}">`)}
+      ${field('Address', `<textarea name="addr">${esc(x.addr || '')}</textarea>`)}${field('Notes', `<input name="notes" value="${esc(x.notes || '')}">`)}</form>`;
+  }
+  function otherForm(x) {
+    x = x || {cat: 'Other materials', status: 'In stock', qty: 1};
+    return `<form id="frec">
+      ${field('Category', `<input name="cat" list="dlocat" value="${esc(x.cat || '')}">${dl('dlocat', OTHER_CATS)}`)}
+      ${field('Item / model *', `<input name="item" required value="${esc(x.item || '')}">`)}
+      ${field('Description', `<input name="desc" value="${esc(x.desc || '')}">`)}
+      <div class="f2">${field('Qty', `<input name="qty" inputmode="numeric" value="${esc(x.qty ?? '')}">`)}${field('Serial #', `<input name="sn" value="${esc(x.sn || '')}" autocapitalize="characters">`)}</div>
+      <div class="f2">${field('Cost each ₱', `<input name="cost" inputmode="decimal" value="${esc(x.cost ?? '')}">`)}${field('SRP ₱', `<input name="srp" inputmode="decimal" value="${esc(x.srp ?? '')}">`)}</div>
+      <div class="f2">${field('Location', `<input name="loc" value="${esc(x.loc || '')}" placeholder="Warehouse, office…">`)}${field('Customer', `<input name="cust" list="dlcust5" value="${esc(x.cust || '')}">`)}</div>${dl('dlcust5', custNames())}
+      ${field('Status', choice('status', OTHER_ST, x.status || 'In stock'))}
+      ${field('Remarks', `<textarea name="notes">${esc(x.notes || '')}</textarea>`)}
+    </form>`;
+  }
+
+  function issuesCardHtml() {
+    const all = D().issues || [], open = all.filter(x => (x.status || 'Open') === 'Open'), hist = all.filter(x => (x.status || 'Open') !== 'Open');
+    const row = x => `<button class="item" data-act="issueEdit" data-r="${x.r}"><span class="pill ${x.type === 'Defective' ? 'p-PARTIAL' : x.type === 'Over' ? 'p-Done' : 'p-UNPAID'}">${esc(x.type || 'Missing')} ${x.qty ?? ''}</span>
+      <span class="grow"><div class="t small clip">${esc(x.item || x.pn)}</div><div class="s clip">${esc([x.pn && x.item !== x.pn ? x.pn : '', x.since ? 'since ' + x.since : '', x.status !== 'Open' ? x.status : '', x.notes].filter(Boolean).join(' · '))}</div></span></button>`;
+    return `<div class="card"><div class="card-h"><h2>Missing / defective parts</h2><button class="btn sm" data-act="issueEdit">${ic('plus')} Report</button></div>
+      ${open.length ? `<div class="list">${open.map(row).join('')}</div>` : '<div class="empty" style="padding:10px">No open missing / defective parts</div>'}
+      ${hist.length ? `<button class="btn ghost sm" data-act="issueHist" style="margin-top:6px">${S.issueHist ? 'Hide' : 'Show'} history (${hist.length} deducted / found)</button>${S.issueHist ? `<div class="list">${hist.map(row).join('')}</div>` : ''}` : ''}</div>`;
+  }
+  function issueForm(x) {
+    const isNew = !x;
+    x = x || {type: 'Missing', status: 'Open', qty: 1, date: today()};
+    return `<form id="frec">
+      <div class="f pick"><label>Part *</label><input id="i_item" name="item" autocomplete="off" placeholder="Type part name or part no." value="${esc(x.item || '')}"><div class="pick-list hidden" id="i_pick"></div></div>
+      <div class="f2">${field('Part #', `<input name="pn" id="i_pn" value="${esc(x.pn || '')}">`)}${field('Qty', `<input name="qty" inputmode="numeric" value="${esc(x.qty ?? 1)}">`)}</div>
+      ${field('Type', choice('type', ISSUE_T, x.type || 'Missing'))}
+      <div class="f2">${field('Date found', `<input type="date" name="date" value="${esc(x.date || today())}">`)}${field('Since', `<input name="since" value="${esc(x.since || '')}" placeholder="e.g. 02/28/26">`)}</div>
+      ${field('Status', choice('status', ISSUE_ST, x.status || 'Open'), 'Deducted = taken out of the stock count · Found = it was there after all')}
+      ${field('Remarks', `<input name="notes" value="${esc(x.notes || '')}">`)}
+      ${isNew ? '<label class="row small" style="font-weight:600"><input type="checkbox" id="i_out"> Also take it OUT of stock now (if it is in the parts list)</label>' : ''}
+    </form>`;
+  }
+
+  // orders (PO): Planned = Excel "FOR PO" / "FOR ORDER", Ordered = waiting for delivery, Received / Cancelled = done
+  const oAmt = o => (+o.qty || 0) * (+o.rate || 0), oLeft = o => Math.max(0, (+o.qty || 0) - (+o.got || 0));
+  VIEWS.orders = () => {
+    const tab = S.ordTab || 'open', all = D().orders || [];
+    const pl = all.filter(o => o.status === 'Planned'), op = all.filter(o => o.status === 'Ordered'), dn = all.filter(o => o.status === 'Received' || o.status === 'Cancelled');
+    const list = tab === 'planned' ? pl : tab === 'done' ? dn : op;
+    const keyOf = o => tab === 'planned' ? (o.for || 'No project') : [o.po ? 'PO ' + o.po : 'No PO #', o.supplier].filter(Boolean).join(' · ');
+    const groups = new Map(); list.forEach(o => { const k = keyOf(o); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(o); });
+    const row = o => `<button class="item" data-act="ordOpen" data-r="${o.r}"><span class="grow"><div class="t clip">${esc((o.status === 'Ordered' ? oLeft(o) + ' of ' : '') + o.qty + ' × ' + o.item)}</div>
+      <div class="s clip">${esc([tab === 'planned' ? o.supplier : o.for, o.kind, o.rate ? peso(o.rate) + ' each' : '', o.date ? fmtD(o.date, {year: 'numeric'}) : '', o.status === 'Cancelled' ? 'Cancelled' : '', o.notes].filter(Boolean).join(' · '))}</div></span>
+      <span class="r num" style="font-weight:800">${o.rate ? peso(tab === 'open' ? oLeft(o) * o.rate : oAmt(o), 0) : ''}</span></button>`;
+    const sup = D().suppliers || [], prices = D().prices || [];
+    return `
+      <div class="row between wrap" style="margin-bottom:12px"><h1 style="margin:0">Orders (PO)</h1><button class="btn primary sm" data-act="ordNew">${ic('plus')} New order line</button></div>
+      <div class="stats">
+        <button class="stat" data-act="ordTab" data-t="planned"><span>To order (planned)</span><b>${pl.length}</b><div class="muted small num">${peso(pl.reduce((a, o) => a + oAmt(o), 0), 2)}</div></button>
+        <button class="stat" data-act="ordTab" data-t="open"><span>Ordered, not delivered</span><b>${op.reduce((a, o) => a + oLeft(o), 0)}</b><div class="muted small num">${peso(op.reduce((a, o) => a + oLeft(o) * (+o.rate || 0), 0), 2)}</div></button>
+      </div>
+      <div class="seg" style="margin-bottom:12px">${[['planned', 'To order'], ['open', 'Waiting delivery'], ['done', 'Done']].map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="ordTab" data-t="${t[0]}">${t[1]}</button>`).join('')}</div>
+      ${Array.from(groups).map(([g, xs]) => `<div class="card"><div class="card-h"><h2 class="small" style="font-size:14px;color:var(--ink-2)">${esc(g)}</h2><span class="muted small num">${peso(xs.reduce((a, o) => a + (tab === 'open' ? oLeft(o) * (+o.rate || 0) : oAmt(o)), 0), 0)}</span></div><div class="list">${xs.map(row).join('')}</div></div>`).join('')
+        || `<div class="card"><div class="empty">${tab === 'planned' ? 'Nothing planned' : tab === 'done' ? 'Nothing yet' : 'Nothing waiting for delivery'}</div></div>`}
+      <div class="card"><div class="card-h"><h2>Suppliers</h2><button class="btn sm" data-act="supEdit">${ic('plus')} Add</button></div><div class="list">
+        ${sup.map(v => `<button class="item" data-act="supEdit" data-r="${v.r}"><span class="grow"><div class="t clip">${esc(v.name)}</div><div class="s clip">${esc([v.supplies, v.contact, v.phone, v.addr].filter(Boolean).join(' · '))}</div></span></button>`).join('') || '<div class="empty">No suppliers yet</div>'}</div></div>
+      ${prices.length ? `<div class="card"><div class="card-h"><h2>Material prices: KNP vs Hisys</h2></div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Item</th><th>KNP</th><th>Hisys</th></tr></thead><tbody>
+        ${prices.map(m => { const lo = m.knp && m.hisys ? Math.min(m.knp, m.hisys) : null; return `<tr><td style="text-align:left">${esc(m.item)}</td>${['knp', 'hisys'].map(k => `<td style="${lo !== null && m[k] === lo ? 'font-weight:800;color:var(--green)' : ''}">${m[k] ? money(m[k]) : '—'}</td>`).join('')}</tr>`; }).join('')}</tbody></table></div>
+        <p class="muted small">${esc(prices.find(m => m.notes) ? prices.find(m => m.notes).notes : '')} Green = cheaper. Edit in the sheet tab MATERIAL PRICES.</p></div>` : ''}`;
+  };
+  function orderForm(o) {
+    const isNew = !o, kind = (o && o.kind) || S.ordKind || 'Unit';
+    o = o || {kind, qty: 1, date: today(), status: 'Planned'};
+    const sups = Array.from(new Set((D().suppliers || []).map(v => v.name).concat((D().units || []).map(u => u.supplier)).filter(Boolean)));
+    return `<form id="frec">
+      ${field('Kind', `<div class="seg" style="width:100%">${[['Unit', 'Aircon unit'], ['Part', 'Part'], ['Other', 'Other']].map(k => `<button type="button" style="flex:1" class="${o.kind === k[0] ? 'on' : ''}" data-act="ordKind" data-k="${k[0]}">${k[1]}</button>`).join('')}</div>`)}
+      <div class="f pick"><label>Item *</label><input id="o_item" name="item" autocomplete="off" placeholder="Type model or part (or any text)" value="${esc(o.item || '')}"><div class="pick-list hidden" id="o_pick"></div><div class="hint" id="o_hint"></div></div>
+      <div class="f2">${field('Qty *', `<input name="qty" inputmode="numeric" value="${esc(o.qty ?? 1)}">`)}${field('Rate each ₱ (cost)', `<input name="rate" id="o_rate" inputmode="decimal" value="${esc(o.rate ?? '')}">`)}</div>
+      ${field('For (customer / project)', `<input name="for" list="dlcust6" value="${esc(o.for || '')}">`)}${dl('dlcust6', custNames())}
+      ${field('Supplier', `<input name="supplier" list="dlsup" value="${esc(o.supplier || '')}">`)}${dl('dlsup', sups)}
+      <div class="f2">${field('PO #', `<input name="po" value="${esc(o.po || '')}" placeholder="Empty = not ordered yet">`)}${field('Date', `<input type="date" name="date" value="${esc(o.date || today())}">`)}</div>
+      ${isNew ? '' : field('Status', choice('status', ORDER_ST, o.status || 'Planned'))}
+      ${field('Notes', `<input name="notes" value="${esc(o.notes || '')}">`)}
+      ${isNew ? '<p class="hint">No PO # yet = “To order”. With a PO # = “Waiting delivery”. When it arrives, open it → Received: it goes IN to stock by itself.</p>' : ''}
+    </form>`;
+  }
+  function bindOrderForm(v) {
+    picker($('#o_item', v), $('#o_pick', v), q => {
+      q = lc(q); if (q.length < 2) return [];
+      const k = S.ordKind, list = k === 'Part' ? (D().parts || []) : k === 'Unit' ? (D().units || []) : [];
+      return list.filter(x => lc([x.item, x.pn, x.type, x.hp, x.group].join(' ')).includes(q)).slice(0, 30)
+        .map(x => ({t: x.item, s: [x.pn || x.type, x.hp, 'stock ' + x.now, x.cost ? 'cost ' + peso(x.cost) : ''].filter(Boolean).join(' · '), v: x}));
+    }, o => { $('#o_item', v).value = o.t; if (o.v.cost && !$('#o_rate', v).value) $('#o_rate', v).value = o.v.cost; if (o.v.supplier && !v.querySelector('[name=supplier]').value) v.querySelector('[name=supplier]').value = o.v.supplier; $('#o_hint', v).textContent = 'In the stock list ✓ — it will go IN to stock when received'; });
+  }
+
+  function itemForm(kind) {
+    const part = kind === 'part', list = stockList(kind);
+    const opts = a => Array.from(new Set(a.filter(Boolean)));
+    return `<form id="fitem">
+      ${field(part ? 'Part name *' : 'Model *', `<input name="item" required placeholder="${part ? 'e.g. HSN12ISB main board [EBR78599014]' : 'e.g. HSN12ISB/HSU12ISB'}">`, 'Must be different from every name in the list.')}
+      ${part ? `<div class="f2">${field('Part no.', '<input name="pn" autocapitalize="characters">')}${field('Group', `<input name="group" list="dlgrp">`)}</div>${dl('dlgrp', opts(list.map(x => x.group)))}
+        <div class="f2">${field('Customer price ₱', '<input name="price" inputmode="decimal">')}${field('LG cost ₱', '<input name="cost" inputmode="decimal">')}</div>`
+      : `<div class="f2">${field('Type', `<input name="type" list="dltype">`)}${field('HP', '<input name="hp" placeholder="e.g. 1.5hp">')}</div>${dl('dltype', opts(list.map(x => x.type)))}
+        <div class="f2">${field('SRP ₱', '<input name="srp" inputmode="decimal">')}${field('Cost ₱', '<input name="cost" inputmode="decimal">')}</div>
+        <div class="f2">${field('Supplier', `<input name="supplier" list="dlsup2">`)}${field('PO #', '<input name="po">')}</div>${dl('dlsup2', opts(list.map(x => x.supplier).concat((D().suppliers || []).map(v => v.name))))}`}
+      ${field('Notes', '<input name="notes">')}
+      <p class="hint">It starts with 0 in stock. When it arrives, record IN (or receive its order line).</p></form>`;
+  }
+
+  function countDoc(kind) {
+    const part = kind === 'part';
+    let list = stockList(kind).slice();
+    if (S.stockFilter === 'in') list = list.filter(x => x.now > 0);
+    const groups = new Map(); list.forEach(x => { const g = (part ? x.group : x.type) || 'Other'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(x); });
+    let n = 0;
+    return `<div class="doc">${letterhead()}<h3>STOCK COUNT SHEET — ${part ? 'PARTS' : 'AIRCON UNITS'}</h3>
+      <table class="noline" style="margin-bottom:8px"><tr><td><b>Count date:</b> ____________________</td><td><b>Counted by:</b> ____________________</td><td><b>System qty as of:</b> ${esc(fmtMDY(today()))}</td></tr></table>
+      <table><thead><tr><th class="c" style="width:30px">#</th><th>${part ? 'Part' : 'Model'}</th><th style="width:${part ? 110 : 70}px">${part ? 'Part no.' : 'HP'}</th><th class="c" style="width:56px">System</th><th class="c" style="width:62px">Counted</th><th class="c" style="width:48px">Diff.</th><th style="width:130px">Remarks</th></tr></thead>
+      <tbody>${Array.from(groups).map(([g, xs]) => `<tr><td colspan="7" style="background:#f3f5f8"><b>${esc(g)}</b></td></tr>${xs.map(x => `<tr><td class="c">${++n}</td><td style="font-size:${part ? 10 : 12}px">${esc(x.item)}</td><td>${esc(part ? x.pn : x.hp)}</td><td class="c"><b>${x.now}</b></td><td></td><td></td><td></td></tr>`).join('')}`).join('')}</tbody></table>
+      <p class="tiny" style="margin-top:6px">Difference found? Record it on the website: Stock → IN / OUT (note “stock count”), or Parts → Missing / defective → Report.</p>
+      <div class="sig"><div>Counted by</div><div>Checked by</div><div>Approved by</div></div></div>`;
+  }
   function stockGroupsHtml(groups, kind) {
     if (!groups.size) return '<div class="card"><div class="empty">Nothing found</div></div>';
     return Array.from(groups).map(([g, xs]) => `<div class="card"><div class="card-h"><h2 class="small" style="font-size:14px;color:var(--ink-2)">${esc(g)}</h2><span class="muted small">${xs.length}</span></div><div class="list">
@@ -517,6 +682,7 @@
   }
   VIEWS.stock.after = () => {
     const inp = $('#qstock');
+    if (S.stockKind === 'other') { inp && inp.addEventListener('input', () => { S.q.stock = inp.value; $('#otherList').innerHTML = otherListHtml(); }); return; }
     inp && inp.addEventListener('input', () => {
       S.q.stock = inp.value;
       const kind = S.stockKind, q = lc(inp.value);
@@ -819,7 +985,7 @@
 
   VIEWS.more = () => `<h1>More</h1><p class="sub">Logged in as <b>${esc(S.me && S.me.name)}</b></p>
     <div class="card"><div class="list">
-      ${[['ask', 'Ask GPT', 'chat', 'c-blue'], ['materials', 'Materials for AI (upload)', 'book', 'c-violet'], ['money', 'Money — unpaid & payments', 'peso', 'c-amber'], ['quotes', 'Quotes, invoices & forms', 'doc', 'c-red'], ['report', 'LG Monthly Report', 'chart', 'c-green'], ['activity', 'Activity', 'log', 'c-blue'], ['help', 'Help', 'help', 'c-violet']]
+      ${[['ask', 'Ask GPT', 'chat', 'c-blue'], ['materials', 'Materials for AI (upload)', 'book', 'c-violet'], ['orders', 'Orders (PO) & suppliers', 'inbox', 'c-teal'], ['money', 'Money — unpaid & payments', 'peso', 'c-amber'], ['quotes', 'Quotes, invoices & forms', 'doc', 'c-red'], ['report', 'LG Monthly Report', 'chart', 'c-green'], ['activity', 'Activity', 'log', 'c-blue'], ['help', 'Help', 'help', 'c-violet']]
         .map(x => `<button class="item" data-go="${x[0]}"><span class="qi ${x[3]}" style="width:38px;height:38px">${ic(x[2])}</span><span class="grow t">${x[1]}</span>${ic('right')}</button>`).join('')}
       <button class="item" data-act="lang"><span class="qi c-blue" style="width:38px;height:38px"><b class="noi18n">A/가</b></span><span class="grow t">Language</span><span class="muted small noi18n">${lang() === 'ko' ? '한국어 → English' : 'English → 한국어'}</span></button>
       <button class="item" data-act="openSheet"><span class="qi c-teal" style="width:38px;height:38px">${ic('sheet')}</span><span class="grow t">Open Google Sheet</span>${ic('right')}</button>
@@ -1238,6 +1404,7 @@
         <button data-act="newJob"><span class="qi c-blue">${ic('cal')}</span>New job</button>
         <button data-act="move" data-kind="unit"><span class="qi c-green">${ic('box')}</span>Unit in / out</button>
         <button data-act="move" data-kind="part"><span class="qi c-teal">${ic('wrench')}</span>Part in / out</button>
+        <button data-act="ordNew"><span class="qi c-teal">${ic('inbox')}</span>Order (PO)</button>
         <button data-act="pay"><span class="qi c-amber">${ic('peso')}</span>Payment received</button>
         <button data-act="clean"><span class="qi c-violet">${ic('spark')}</span>Cleaning done</button>
         <button data-act="install"><span class="qi c-blue">${ic('users')}</span>New installation</button>
@@ -1284,7 +1451,7 @@
     calNav: el => { const [y, m] = S.calYM.split('-').map(Number); const d = new Date(Date.UTC(y, m - 1 + +el.dataset.n, 1)); S.calYM = d.toISOString().slice(0, 7); S.calSel = S.calYM + '-01'; if (S.calYM === today().slice(0, 7)) S.calSel = today(); render(); },
     calToday: () => { S.calYM = today().slice(0, 7); S.calSel = today(); render(); },
     calMode: el => { S.calMode = el.dataset.m; LS.set('brz_calmode', S.calMode); render(); },
-    stockKind: el => { S.stockKind = el.dataset.k; render(); },
+    stockKind: el => { if (S.stockKind !== el.dataset.k) S.q.stock = ''; S.stockKind = el.dataset.k; render(); },
     stockFilter: el => { S.stockFilter = el.dataset.f; render(); },
     stockItem: el => {
       const kind = el.dataset.kind, x = stockList(kind).find(i => i.r === +el.dataset.r); if (!x) return;
@@ -1297,6 +1464,98 @@
         <h2 style="margin-bottom:4px">Recent moves</h2><div class="list">${moves.map(l => `<div class="item"><span class="pill ${l.dir === 'IN' ? 'p-Done' : 'p-UNPAID'}">${l.dir} ${l.qty}</span><span class="grow"><div class="s">${esc([fmtD(l.date, {year: 'numeric'}), l.party, l.ref, l.by].filter(Boolean).join(' · '))}</div></span></div>`).join('') || '<div class="empty">No moves recorded</div>'}</div>`,
         `${kind === 'unit' ? `<button class="btn" data-act="resNew" data-item="${esc(x.item)}">${ic('plus')} Reserve</button>` : ''}<button class="btn green" data-act="move" data-kind="${kind}" data-item="${esc(x.item)}" data-dir="IN">${ic('inbox')} IN</button><button class="btn red" data-act="move" data-kind="${kind}" data-item="${esc(x.item)}" data-dir="OUT">${ic('outbox')} OUT</button>`);
     },
+    otherDone: () => { S.otherDone = !S.otherDone; render(); },
+    otherEdit: el => {
+      const x = el.dataset.r ? findRec('other', el.dataset.r) : null;
+      S.rec = {k: 'other', x};
+      openSheet(x ? x.item : 'Add other item', otherForm(x), `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="recSave">Save</button>`);
+    },
+    issueHist: () => { S.issueHist = !S.issueHist; render(); },
+    issueEdit: el => {
+      const x = el.dataset.r ? findRec('issues', el.dataset.r) : null;
+      S.rec = {k: 'issues', x};
+      openSheet(x ? 'Missing / defective part' : 'Report missing / defective part', issueForm(x), `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="recSave">Save</button>`, v => {
+        picker($('#i_item', v), $('#i_pick', v), q => {
+          q = lc(q); if (q.length < 2) return [];
+          return (D().parts || []).filter(p => lc(p.item + ' ' + p.pn).includes(q)).slice(0, 30).map(p => ({t: p.item, s: [p.pn, p.group, 'stock ' + p.now].filter(Boolean).join(' · '), v: p}));
+        }, o => { $('#i_item', v).value = o.t; if (o.v.pn) $('#i_pn', v).value = o.v.pn; });
+      });
+    },
+    supEdit: el => {
+      const x = el.dataset.r ? findRec('suppliers', el.dataset.r) : null;
+      S.rec = {k: 'suppliers', x};
+      openSheet(x ? x.name : 'Add supplier', supForm(x), `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="recSave">Save</button>`);
+    },
+    ordTab: el => { S.ordTab = el.dataset.t; render(); },
+    ordNew: () => {
+      closeSheet(); S.ordKind = 'Unit'; S.rec = {k: 'orders', x: null};
+      openSheet('New order line', orderForm(null), `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="recSave">Save</button>`, bindOrderForm);
+    },
+    ordKind: el => { S.ordKind = el.dataset.k; $$('[data-act="ordKind"]').forEach(b => b.classList.toggle('on', b.dataset.k === S.ordKind)); },
+    ordOpen: el => {
+      const o = findRec('orders', el.dataset.r); if (!o) return;
+      S.rec = {k: 'orders', x: o};
+      const left = oLeft(o), open = (o.status === 'Ordered' || o.status === 'Planned') && left > 0;
+      openSheet('Order line', `<dl class="kv"><dt>Item</dt><dd>${esc(o.item)}</dd>${o.kind ? `<dt>Kind</dt><dd>${esc(o.kind)}</dd>` : ''}<dt>Qty</dt><dd>${o.qty}${o.got ? ' · received ' + o.got : ''}</dd>
+          ${o.rate ? `<dt>Rate</dt><dd>${peso(o.rate)} each · ${peso(oAmt(o))}</dd>` : ''}<dt>Status</dt><dd>${esc(o.status || '')}</dd>${o.po ? `<dt>PO #</dt><dd>${esc(o.po)}</dd>` : ''}
+          ${o.supplier ? `<dt>Supplier</dt><dd>${esc(o.supplier)}</dd>` : ''}${o.for ? `<dt>For</dt><dd>${esc(o.for)}</dd>` : ''}${o.date ? `<dt>Date</dt><dd>${esc(fmtD(o.date, {year: 'numeric'}))}</dd>` : ''}${o.notes ? `<dt>Notes</dt><dd>${esc(o.notes)}</dd>` : ''}</dl>
+        ${open ? `<h2 style="margin:6px 0">Delivery came?</h2><div class="f2">${field('How many arrived?', `<input id="or_qty" inputmode="numeric" value="${left}">`)}${field('Date', `<input type="date" id="or_date" value="${today()}">`)}</div>` : ''}`,
+        `<button class="btn" data-act="ordEdit">${ic('edit')} Edit</button>${open ? `<button class="btn primary" data-act="ordRecv">${ic('inbox')} Received</button>` : ''}`);
+    },
+    ordEdit: () => {
+      const o = S.rec && S.rec.x; if (!o) return;
+      S.ordKind = o.kind || 'Unit';
+      openSheet('Edit order line', orderForm(o), `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="recSave">Save</button>`, bindOrderForm);
+    },
+    ordRecv: async el => {
+      const o = S.rec && S.rec.x; if (!o) return;
+      const n = +$('#or_qty').value;
+      if (!(n > 0 && n <= oLeft(o))) return toast('How many: 1 to ' + oLeft(o), true);
+      el.disabled = true;
+      try {
+        const r = await save('orderRecv', {r: o.r, id: o.id, qty: n, date: $('#or_date').value}, `Received ✓ ${n} × ${o.item}`);
+        if (r && r.stock === '' && /unit|part/i.test(o.kind || '')) toast('Received ✓ — not in the stock list, so stock did not change. Add it with “New model / New part”.', true);
+      } catch (e) { el.disabled = false; }
+    },
+    recSave: async el => {
+      const {k, x} = S.rec || {}; if (!k) return;
+      const f = formData('#frec');
+      ['qty', 'cost', 'srp', 'rate'].forEach(n => { if (f[n] !== undefined) f[n] = String(f[n]).replace(/[,₱\s]/g, ''); });
+      if (k === 'orders') {
+        f.kind = S.ordKind || 'Unit';
+        if (!x) f.status = f.po ? 'Ordered' : 'Planned'; else if (f.status === 'Planned' && f.po) f.status = 'Ordered';
+        if (!f.item) return toast('Write the item', true);
+        if (!(+f.qty > 0)) return toast('Qty must be 1 or more', true);
+      }
+      if (k === 'other' && !f.item) return toast('Write the item / model', true);
+      if (k === 'issues' && !f.item && !f.pn) return toast('Choose the part', true);
+      if (k === 'suppliers' && !f.name) return toast('Write the supplier name', true);
+      let set = f;
+      if (x) { set = {}; Object.keys(f).forEach(n => { if (String(f[n] ?? '') !== String(x[n] ?? '')) set[n] = f[n]; }); if (!Object.keys(set).length) return closeSheet(); }
+      const outNow = k === 'issues' && !x && $('#i_out') && $('#i_out').checked;
+      el.disabled = true;
+      try {
+        await save('recSave', {k, r: x ? x.r : undefined, id: x ? x.id : undefined, set}, 'Saved ✓');
+        if (outNow) {
+          const p = (D().parts || []).find(q => q.item === f.item);
+          if (p) await save('stockMove', {move: {kind: 'part', item: p.item, dir: 'OUT', qty: +f.qty || 1, date: f.date || today(), party: '', ref: '', notes: (f.type || 'Missing') + ' part'}}, `OUT ${+f.qty || 1} × ${p.item} ✓`);
+          else toast('Saved. Not in the parts list, so stock did not change.', true);
+        }
+      } catch (e) { el.disabled = false; }
+    },
+    itemNew: el => {
+      S.newKind = el.dataset.kind === 'part' ? 'part' : 'unit';
+      openSheet(S.newKind === 'part' ? 'New part in the list' : 'New model in the list', itemForm(S.newKind), `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="itemSave">Save</button>`);
+    },
+    itemSave: async el => {
+      const f = formData('#fitem');
+      if (!f.item) return toast(S.newKind === 'part' ? 'Write the part name' : 'Write the model', true);
+      if (stockList(S.newKind).some(x => x.item === f.item)) return toast('Already in the list', true);
+      ['srp', 'cost', 'price'].forEach(n => { if (f[n] !== undefined) f[n] = String(f[n]).replace(/[,₱\s]/g, ''); });
+      el.disabled = true;
+      try { await save('addItem', {item: Object.assign(f, {kind: S.newKind})}, 'Added ✓ ' + f.item); } catch (e) { el.disabled = false; }
+    },
+    countSheet: el => printHtml(countDoc(el.dataset.kind)),
     resNew: el => {
       S.rv = {item: el.dataset.item || ''};
       const u = (D().units || []).find(x => x.item === S.rv.item);
@@ -1477,7 +1736,8 @@
       const r = S.route || 'home';
       const tips = {
         schedule: ['Tap a day to see its jobs. Tap a job to change status (Confirmed / Done) or print the Service report.', 'New job: the blue “New job” button.'],
-        stock: ['Tap a model to see stock and recent moves, then IN or OUT.', 'Unit came from the supplier = IN. Installed / sold = OUT.'],
+        stock: ['Tap a model to see stock and recent moves, then IN or OUT.', 'Unit came from the supplier = IN. Installed / sold = OUT.', 'Sold to a project but not installed yet → “Reserve for a project”.', 'Other = other brands, appliances, second-hand and customer units for repair.'],
+        orders: ['To order = planned (Excel “FOR PO”). Add the PO # when you order it.', 'Delivery came → open the line → Received. Units / parts go IN to stock by itself.'],
         customers: ['Search by name, place, model or serial number.', 'Open a customer → “Cleaned” after cleaning; next cleaning is set 6 months later.'],
         money: ['Customer paid → “Payment received”. The balance updates by itself.', 'New sale on credit → “New contract”. “Statement” prints a statement of account.'],
         quotes: ['New quotation → add items from stock (price fills in) → Save & print / PDF.', 'Quotation accepted → open it → “Make invoice”.'],

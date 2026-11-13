@@ -56,6 +56,15 @@
       statuses: ['Scheduled', 'Confirmed', 'Done', 'Moved', 'Cancelled'], methods: ['Cash', 'Bank', 'GCash', 'Check', 'Other'],
       unitRes: [{r: 2, id: 'DEMO-R-1', date: add(-20), item: 'APNQ36GR5A4/AUUQ36GH4', qty: 2, party: 'Blue Lagoon Hotel / New wing', ref: 'PO 1021', status: 'Reserved', by: 'Ladie', notes: ''},
         {r: 3, id: 'DEMO-R-2', date: add(-3), item: 'ZTNQ18GTLA0/ZUAB1', qty: 1, party: 'Golden Star Office', ref: '', status: 'Reserved', by: 'Ladie', notes: 'waiting for LG delivery'}],
+      orders: [{r: 2, id: 'DEMO-O-1', status: 'Ordered', po: '2026-07', date: add(-30), supplier: 'LG Electronics Philippines Inc.', kind: 'Unit', item: 'ZTNQ18GTLA0/ZUAB1', qty: 2, got: 0, rate: 61360, for: 'Golden Star Office', notes: ''},
+        {r: 3, id: 'DEMO-O-2', status: 'Planned', po: '', date: add(-2), supplier: 'LG Electronics Philippines Inc.', kind: 'Unit', item: 'HSN24ISB/HSU24ISB', qty: 4, got: 0, rate: 32174, for: 'Blue Lagoon Hotel / New wing', notes: 'SRP less 45%'},
+        {r: 4, id: 'DEMO-O-3', status: 'Received', po: 'CSAS 2026-07', date: add(-10), supplier: 'Cool Station Airconditioning Services', kind: 'Unit', item: 'HSN12ISB/HSU12ISB', qty: 1, got: 1, rate: 23000, for: 'Mr. Daniel Cruz', notes: ''}],
+      other: [{r: 2, id: 'DEMO-X-1', cat: 'LG appliance', item: 'WF-S100DB', desc: 'Washing machine (top load)', sn: 'DEMO604', qty: 1, cost: 16737.72, srp: 24995, loc: 'Warehouse', cust: '', status: 'In stock', notes: ''},
+        {r: 3, id: 'DEMO-X-2', cat: 'Second-hand unit', item: 'HS09IV', desc: 'Indoor + outdoor', sn: '', qty: 2, cost: null, srp: null, loc: 'Warehouse', cust: '', status: 'In stock', notes: ''},
+        {r: 4, id: 'DEMO-X-3', cat: 'Customer unit (repair)', item: 'HS12IS', desc: 'Indoor + outdoor', sn: '', qty: 2, cost: null, srp: null, loc: 'Workshop', cust: 'Sunrise Bakery', status: 'For repair', notes: ''}],
+      issues: [{r: 2, id: 'DEMO-I-1', date: add(-40), pn: 'EAE43285407', item: 'Capacitor 35uF', qty: 1, type: 'Missing', since: '', status: 'Open', notes: 'not found at count'}],
+      suppliers: [{r: 2, id: 'DEMO-V-1', name: 'LG Electronics Philippines Inc.', supplies: 'LG units and parts', contact: 'Demo contact', phone: '', email: '', addr: 'Pasig City', notes: ''}],
+      prices: [{r: 2, item: 'Coppertube 1/4', knp: 2297, hisys: 1953.13, notes: ''}, {r: 3, item: 'Rubber Insulation 1/4', knp: 301, hisys: 344.86, notes: ''}],
       units, parts, unitLog, partLog, schedule: sched, receivables, payments: [], customers, quotes: [], log: [], arTotal: null, ask: [], know: [], aiOnline: true};
     recalc(D);
     return D;
@@ -139,6 +148,23 @@
       if (b.status === 'Installed') D.unitLog.push({r: ++seq, date: b.date, item: x.item, dir: 'OUT', qty: b.qty, party: x.party, ref: x.ref, by: me.name, notes: 'Installed (reserved ' + x.id + ')'});
       if (b.qty < x.qty) { x.qty -= b.qty; D.unitRes.push(Object.assign({}, x, {r: ++seq, id: 'DEMO-R-' + seq, qty: b.qty, status: b.status, done: b.date})); } else { x.status = b.status; x.done = b.date; }
       log(me, b.status === 'Installed' ? 'Reserved unit installed' : 'Reservation cancelled', `${b.qty} × ${x.item} · ${x.party}`);
+    } else if (a === 'recSave') {
+      const L = D[b.k] = D[b.k] || [];
+      if (b.r) { const x = L.find(k => k.r === b.r && k.id === b.id) || err('Not found. Please refresh.'); Object.assign(x, b.set); ['qty', 'cost', 'srp', 'rate'].forEach(n => { if (x[n] !== undefined && x[n] !== '' && x[n] !== null) x[n] = +x[n]; }); }
+      else { const x = Object.assign({r: ++seq, id: 'DEMO-' + b.k + '-' + seq, got: 0}, b.set); ['qty', 'cost', 'srp', 'rate'].forEach(n => { if (x[n] !== undefined && x[n] !== '') x[n] = +x[n]; }); L.push(x); }
+      log(me, (b.r ? 'Updated · ' : 'Added · ') + b.k, b.set.item || b.set.name || '');
+    } else if (a === 'orderRecv') {
+      const o = (D.orders || []).find(k => k.r === b.r && k.id === b.id) || err('Not found. Please refresh.');
+      o.got = (+o.got || 0) + b.qty; o.status = o.got >= o.qty ? 'Received' : 'Ordered';
+      const list = /part/i.test(o.kind) ? D.parts : D.units, hit = list.find(x => x.item === o.item);
+      if (hit && /unit|part/i.test(o.kind)) (/part/i.test(o.kind) ? D.partLog : D.unitLog).push({r: ++seq, date: b.date, item: o.item, dir: 'IN', qty: b.qty, party: o.supplier, ref: o.po, by: me.name, notes: 'Received (order)'});
+      log(me, 'Order received', `${b.qty} × ${o.item}`); recalc(D); persist(); return {ok: true, stock: hit ? o.item : ''};
+    } else if (a === 'addItem') {
+      const x = b.item, L = x.kind === 'part' ? D.parts : D.units;
+      if (L.some(k => k.item === x.item)) err('Already in the list: ' + x.item);
+      L.push(x.kind === 'part' ? {r: ++seq, item: x.item, pn: x.pn, group: x.group, start: 0, now: 0, price: +x.price || null, cost: +x.cost || null, notes: x.notes}
+        : {r: ++seq, item: x.item, type: x.type, hp: x.hp, start: 0, now: 0, srp: +x.srp || null, cost: +x.cost || null, supplier: x.supplier, notes: x.notes});
+      log(me, 'New item in list', x.item);
     } else if (a === 'payment') {
       const p = b.pay; D.payments.push({r: ++seq, date: p.date, project: p.project, amount: +p.amount, method: p.method, by: p.by, notes: p.notes});
       log(me, 'Payment', `₱${(+p.amount).toLocaleString('en-US', {minimumFractionDigits: 2})} · ${p.project} · ${p.method}`);

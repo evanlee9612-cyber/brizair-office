@@ -50,7 +50,7 @@ function doPost(e) {
 /** which data sections each save changes (sent back right away) */
 var CHANGES = {addJob: ['schedule', 'log'], updateJob: ['schedule', 'log'], stockMove: ['stock', 'log'], payment: ['money', 'log'],
   newReceivable: ['money', 'log'], cleaningDone: ['customers', 'log'], addInstall: ['customers', 'log'], saveQuote: ['docs', 'log'],
-  quoteStatus: ['docs', 'log'], resAdd: ['stock', 'log'], resSet: ['stock', 'log'], jobPhoto: ['schedule', 'log'], kNote: ['ask', 'log'], kUpload: ['ask', 'log'], kHide: ['ask', 'log'], askRate: ['ask', 'log']};
+  quoteStatus: ['docs', 'log'], resAdd: ['stock', 'log'], resSet: ['stock', 'log'], recSave: ['stock', 'log'], orderRecv: ['stock', 'log'], addItem: ['stock', 'log'], jobPhoto: ['schedule', 'log'], kNote: ['ask', 'log'], kUpload: ['ask', 'log'], kHide: ['ask', 'log'], askRate: ['ask', 'log']};
 
 var ACTIONS = {
   boot: boot_,
@@ -60,6 +60,9 @@ var ACTIONS = {
   stockMove: stockMove_,
   resAdd: resAdd_,
   resSet: resSet_,
+  recSave: recSave_,
+  orderRecv: orderRecv_,
+  addItem: addItem_,
   payment: payment_,
   newReceivable: newReceivable_,
   cleaningDone: cleaningDone_,
@@ -299,7 +302,7 @@ function boot_(req, me, parts) {
   var out = {ok: true, me: {name: me.name, role: me.role}, at: new Date().toISOString(), v: VERSION, sections: parts || SECTIONS,
     sheetUrl: 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit', jobs: JOBS, statuses: STATUSES, methods: METHODS};
   var T, i, names = [];
-  if (want.stock) names.push('UNITS', 'PARTS', 'UNIT IN-OUT', 'PART IN-OUT', RES_TAB);
+  if (want.stock) names.push('UNITS', 'PARTS', 'UNIT IN-OUT', 'PART IN-OUT', RES_TAB, 'ORDERS', 'OTHER STOCK', 'PART ISSUES', 'SUPPLIERS', 'MATERIAL PRICES');
   if (want.schedule) names.push('SCHEDULE');
   if (want.money) names.push('RECEIVABLES', 'PAYMENTS');
   if (want.customers) names.push('CUSTOMERS');
@@ -323,6 +326,7 @@ function boot_(req, me, parts) {
     out.unitLog = moves_('UNIT IN-OUT');
     out.partLog = moves_('PART IN-OUT');
     out.unitRes = resRows_();
+    Object.keys(RECS).forEach(function (k) { out[k] = recRows_(k); });
     tm.stock = Date.now() - t0;
   }
   if (want.schedule) {
@@ -516,6 +520,125 @@ function resSet_(req, me) {
     }
     done_(me, st === 'Installed' ? 'Reserved unit installed' : 'Reservation cancelled', qty + ' × ' + item + ' · ' + party, st === 'Installed' ? '🚚' : '✖');
     return {ok: true};
+  });
+}
+
+// ───────────────────────── simple record tabs (from Ladie's Excel: orders, other stock, missing parts, suppliers) ─────────────────────────
+var RECS = {
+  orders: {tab: 'ORDERS', pre: 'O', need: ['item', 'qty'], cols: [['id', 'ID'], ['status', 'Status (상태)'], ['po', 'PO # (발주 번호)'], ['date', 'Date (날짜)', 'date'],
+    ['supplier', 'Supplier (공급처)'], ['kind', 'Kind (종류)'], ['item', 'Item (모델·부품)'], ['qty', 'Qty (수량)', 'num'], ['got', 'Received (입고)', 'num'],
+    ['rate', 'Rate each (원가)', 'num'], ['for', 'For (손님·현장)'], ['notes', 'Notes (메모)']]},
+  other: {tab: 'OTHER STOCK', pre: 'X', need: ['item'], cols: [['id', 'ID'], ['cat', 'Category (분류)'], ['item', 'Item / Model (모델)'], ['desc', 'Description (설명)'],
+    ['sn', 'Serial # (시리얼)'], ['qty', 'Qty (수량)', 'num'], ['cost', 'Cost each (원가)', 'num'], ['srp', 'SRP (손님가)', 'num'], ['loc', 'Location (위치)'],
+    ['cust', 'Customer (손님)'], ['status', 'Status (상태)'], ['notes', 'Remarks (메모)'], ['upd', 'Updated (수정일)', 'date']]},
+  issues: {tab: 'PART ISSUES', pre: 'I', need: ['item'], cols: [['id', 'ID'], ['date', 'Date (날짜)', 'date'], ['pn', 'Part # (부품번호)'], ['item', 'Part (부품)'],
+    ['qty', 'Qty (수량)', 'num'], ['type', 'Type (종류)'], ['since', 'Since (언제부터)'], ['status', 'Status (상태)'], ['notes', 'Remarks (메모)']]},
+  suppliers: {tab: 'SUPPLIERS', pre: 'V', need: ['name'], cols: [['id', 'ID'], ['name', 'Name (공급처)'], ['supplies', 'Supplies (취급 품목)'], ['contact', 'Contact person (담당자)'],
+    ['phone', 'Phone (전화)'], ['email', 'Email (이메일)'], ['addr', 'Address (주소)'], ['notes', 'Notes (메모)']]},
+  prices: {tab: 'MATERIAL PRICES', readOnly: true, cols: [['item', 'Item (자재)'], ['knp', 'KNP price (KNP 가격)', 'num'], ['hisys', 'Hisys price (Hisys 가격)', 'num'], ['notes', 'Notes (메모)']]}
+};
+function recRows_(k) {
+  var R = RECS[k];
+  if (!(_pre && _pre[R.tab]) && !ss_().getSheetByName(R.tab)) return [];
+  var T = table_(R.tab);
+  return rows_(T, function (r, i) {
+    var o = {r: i + 1}, any = false;
+    R.cols.forEach(function (c) {
+      var ci = colOpt_(T, norm_(c[1])); if (ci < 0) return;
+      var v = r[ci];
+      o[c[0]] = c[2] === 'num' ? n_(v) : c[2] === 'date' ? d_(v) : s_(v);
+      if (c[0] !== 'id' && o[c[0]] !== '' && o[c[0]] !== null) any = true;
+    });
+    return any ? o : null;
+  });
+}
+function recVal_(c, v) {
+  if (c[2] === 'num') { var n = n_(v); return n === null ? '' : n; }
+  if (c[2] === 'date') return v ? toDate_(v) : '';
+  return clip_(v, 400);
+}
+/** add (no r) or change (r + id) one record. Only listed fields. */
+function recSave_(req, me) {
+  var R = RECS[req.k];
+  if (!R || R.readOnly) throw bad_('Unknown list');
+  var set = req.set || {}, cmap = {};
+  R.cols.forEach(function (c) { cmap[c[0]] = c; });
+  return withLock_(function () {
+    var ss = ss_(), sh = ss.getSheetByName(R.tab);
+    if (!sh) { sh = ss.insertSheet(R.tab); sh.getRange(1, 1, 1, R.cols.length).setValues([R.cols.map(function (c) { return c[1]; })]).setFontWeight('bold'); sh.setFrozenRows(1); }
+    var T = table_(R.tab), obj = {}, row;
+    Object.keys(set).forEach(function (f) { if (cmap[f] && f !== 'id') obj[norm_(cmap[f][1])] = recVal_(cmap[f], set[f]); });
+    if (cmap.upd) obj[norm_(cmap.upd[1])] = toDate_(today_());
+    if (req.r) {
+      row = +req.r;
+      if (!(row >= 2 && row <= T.vals.length)) throw bad_('Not found. Please refresh.');
+      if (s_(T.vals[row - 1][col_(T, 'id')]) !== String(req.id || '')) throw bad_('This was changed by someone else. Please refresh.');
+    } else {
+      (R.need || []).forEach(function (f) { if (set[f] === undefined || String(set[f]).trim() === '') throw bad_('Write the ' + f); });
+      row = lastRowOf_(T, col_(T, 'id')) + 1;
+      obj['id'] = id_(R.pre);
+    }
+    writeRow_(T, row, obj);
+    var name = set.item || set.name || (req.r ? s_(T.vals[row - 1][colOpt_(T, norm_((cmap.item || cmap.name)[1]))]) : '');
+    done_(me, (req.r ? 'Updated' : 'Added') + ' · ' + R.tab, name + (set.status ? ' → ' + set.status : '') + (set.qty !== undefined ? ' · qty ' + set.qty : ''), '🗂️');
+    return {ok: true, r: row};
+  });
+}
+/** order line received (all or part): Received goes up; the unit / part goes IN to stock when it is in the stock list */
+function orderRecv_(req, me) {
+  return withLock_(function () {
+    var T = table_('ORDERS'), r = +req.r;
+    if (!(r >= 2 && r <= T.vals.length)) throw bad_('Not found. Please refresh.');
+    var cur = T.vals[r - 1], g = function (h) { return cur[col_(T, h)]; };
+    if (s_(g('id')) !== String(req.id || '')) throw bad_('This was changed by someone else. Please refresh.');
+    var st = s_(g('status'));
+    if (st !== 'Ordered' && st !== 'Planned') throw bad_('This line is ' + (st || 'not open'));
+    var qty = n_(g('qty')) || 0, got = n_(g('received')) || 0, n = Math.round(+req.qty);
+    if (!(n > 0 && n <= qty - got)) throw bad_('Qty must be 1 to ' + (qty - got));
+    var day = toDate_(req.date || today_()), item = s_(g('item')), kind = s_(g('kind')).toLowerCase(), po = s_(g('po #'));
+    T.sh.getRange(r, col_(T, 'received') + 1).setValue(got + n);
+    T.sh.getRange(r, col_(T, 'status') + 1).setValue(got + n >= qty ? 'Received' : 'Ordered');
+    var inStock = '';
+    if (kind === 'unit' || kind === 'part') {
+      var L = table_(kind === 'part' ? 'PARTS' : 'UNITS'), ic = col_(L, 'item'), pc = colOpt_(L, 'part no.'), pn = (item.match(/\[([^\]]+)\]\s*$/) || [])[1] || item;
+      for (var i = 1; i < L.vals.length && !inStock; i++) if (s_(L.vals[i][ic]) === item) inStock = item;
+      if (!inStock && pc >= 0) {
+        var hits = [];
+        for (i = 1; i < L.vals.length; i++) if (s_(L.vals[i][pc]) && s_(L.vals[i][pc]) === pn) hits.push(s_(L.vals[i][ic]));
+        if (hits.length === 1) inStock = hits[0];
+      }
+      if (inStock) {
+        var M = table_(kind === 'part' ? 'PART IN-OUT' : 'UNIT IN-OUT'), mr = lastRowOf_(M, col_(M, 'item')) + 1;
+        writeRow_(M, mr, {'date': day, 'item': inStock, 'in / out': 'IN', 'qty': n, 'customer / supplier': clip_(s_(g('supplier')), 120),
+          'po / invoice #': clip_(po, 60), 'by': me.name, 'notes': clip_('Received (order ' + s_(g('id')) + ')' + (req.notes ? ' ' + req.notes : ''), 300)});
+      }
+    }
+    done_(me, 'Order received', n + ' × ' + item + (po ? ' · PO ' + po : '') + (inStock ? ' → stock IN' : ' (not in stock list)'), '📦');
+    return {ok: true, stock: inStock};
+  });
+}
+/** new model / part in the stock list (IN / OUT / NOW formulas copied from the row above) */
+function addItem_(req, me) {
+  var x = req.item || {}, part = x.kind === 'part', name = String(x.item || '').trim();
+  if (!name) throw bad_('Write the model / part name');
+  return withLock_(function () {
+    var L = table_(part ? 'PARTS' : 'UNITS'), ic = col_(L, 'item');
+    for (var i = 1; i < L.vals.length; i++) if (s_(L.vals[i][ic]) === name) throw bad_('Already in the list: ' + name);
+    var row = lastRowOf_(L, ic) + 1, inC = col_(L, 'in') + 1;
+    var f = L.sh.getRange(row - 1, inC, 1, 3).getFormulasR1C1()[0];
+    var o = {'item': name, 'start nov 1': 0, 'notes': clip_(x.notes, 300), 'bot record id': id_(part ? 'P' : 'U')};
+    if (part) { o['part no.'] = clip_(x.pn, 60); o['group'] = clip_(x.group, 80); o['customer price w/ vat'] = n_(x.price) === null ? '' : n_(x.price); o['lg cost'] = n_(x.cost) === null ? '' : n_(x.cost); }
+    else { o['type'] = clip_(x.type, 80); o['hp'] = clip_(x.hp, 20); o['srp'] = n_(x.srp) === null ? '' : n_(x.srp); o['cost'] = n_(x.cost) === null ? '' : n_(x.cost);
+      o['supplier'] = clip_(x.supplier, 120); o['po #'] = clip_(x.po, 60); }
+    writeRow_(L, row, o);
+    if (f.every(function (s) { return s; })) L.sh.getRange(row, inC, 1, 3).setFormulasR1C1([f]);
+    else {
+      var log = part ? "'PART IN-OUT'" : "'UNIT IN-OUT'";
+      L.sh.getRange(row, inC, 1, 3).setFormulas([['=SUMIFS(' + log + '!D:D,' + log + '!B:B,A' + row + ',' + log + '!C:C,"IN")',
+        '=SUMIFS(' + log + '!D:D,' + log + '!B:B,A' + row + ',' + log + '!C:C,"OUT")', '=IF(A' + row + '="","",D' + row + '+E' + row + '-F' + row + ')']]);
+    }
+    done_(me, part ? 'New part in list' : 'New model in list', name, '🆕');
+    return {ok: true, r: row};
   });
 }
 
