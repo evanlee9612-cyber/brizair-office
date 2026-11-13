@@ -472,7 +472,7 @@
     if (!groups.size) return '<div class="card"><div class="empty">Nothing found</div></div>';
     return Array.from(groups).map(([g, xs]) => `<div class="card"><div class="card-h"><h2 class="small" style="font-size:14px;color:var(--ink-2)">${esc(g)}</h2><span class="muted small">${xs.length}</span></div><div class="list">
       ${xs.map(x => `<button class="item" data-act="stockItem" data-kind="${kind}" data-r="${x.r}">
-        <span class="grow"><div class="t">${esc(x.item)}</div><div class="s clip">${esc(kind === 'part' ? [x.pn, x.price != null ? peso(x.price) : ''].filter(Boolean).join(' · ') : [x.hp, x.srp != null ? 'SRP ' + peso(x.srp, 0) : ''].filter(Boolean).join(' · '))}</div></span>
+        <span class="grow"><div class="t">${esc(x.item)}</div><div class="s clip">${esc(kind === 'part' ? [x.pn, x.price ? peso(x.price) : '', x.cost ? 'LG ' + peso(x.cost) : ''].filter(Boolean).join(' · ') : [x.hp, x.srp ? 'SRP ' + peso(x.srp, 0) : '', x.cost ? 'cost ' + peso(x.cost, 0) : ''].filter(Boolean).join(' · '))}</div></span>
         <span class="qty ${x.now > 0 ? 'has' : 'zero'}">${x.now}</span></button>`).join('')}</div></div>`).join('');
   }
   VIEWS.stock.after = () => {
@@ -951,7 +951,7 @@
     picker($('#m_item', v), $('#m_pick', v), q => {
       q = lc(q);
       return stockList(kind).filter(x => !q || lc([x.item, x.type, x.hp, x.pn, x.group].join(' ')).includes(q)).slice(0, 40)
-        .map(x => ({t: x.item, s: [kind === 'part' ? x.group : x.type, x.hp, 'stock ' + x.now].filter(Boolean).join(' · '), v: x}));
+        .map(x => ({t: x.item, s: [kind === 'part' ? x.pn || x.group : x.type, x.hp, 'stock ' + x.now, x.cost ? (kind === 'part' ? 'LG ' + peso(x.cost) : 'cost ' + peso(x.cost, 0)) : ''].filter(Boolean).join(' · '), v: x}));
     }, o => { $('#m_item', v).value = o.t; S.mv.item = o.t; $('#m_now', v).textContent = 'In stock now: ' + o.v.now; });
     $('#m_item', v).addEventListener('input', () => { S.mv.item = ''; });
   }
