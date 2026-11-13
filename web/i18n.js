@@ -185,7 +185,7 @@
     [/^GPT reached its ChatGPT usage limit\. Please ask again after (.+)\.$/, 'GPT 사용 한도에 걸렸어요. $1 이후에 다시 물어봐 주세요.'], [/^GPT reached its ChatGPT usage limit\. Please ask again later\.$/, 'GPT 사용 한도에 걸렸어요. 잠시 뒤에 다시 물어봐 주세요.'], [/^Waiting — Sir Kim's PC is offline\. It will answer when the PC is on\.$/, '대기 중 — 대표님 컴퓨터가 꺼져 있어요. 켜지면 답해요.'], [/^No jobs\. ?$/, '일정 없음. '], [/^\+ Add a job on this day$/, '+ 이날 일정 추가']
   ];
   const FRAG = [[/\bInstalled (?=[A-Z—])/g, '설치 '], [/ · Last cleaning /g, ' · 마지막 청소 '], [/ · Next$/g, ' · 다음'], [/^Next$/g, '다음'],
-    [/\bIndoor SN /g, '실내기 SN '], [/\bOutdoor SN /g, '실외기 SN '], [/ in stock now\b/g, ' 지금 재고'], [/\bstock (\d)/g, '재고 $1'], [/ — still (Scheduled|Confirmed)$/g, ' — 아직 $1'], [/ · due /g, ' · 기한 '], [/ · sent /g, ' · 보냄 '], [/^due /g, '기한 ']];
+    [/\bIndoor SN /g, '실내기 SN '], [/\bOutdoor SN /g, '실외기 SN '], [/ in stock now\b/g, ' 지금 재고'], [/\bstock (\d)/g, '재고 $1'], [/ · LG ₱/g, ' · LG 원가 ₱'], [/ · cost ₱/g, ' · 원가 ₱'], [/ — still (Scheduled|Confirmed)$/g, ' — 아직 $1'], [/ · due /g, ' · 기한 '], [/ · sent /g, ' · 보냄 '], [/^due /g, '기한 ']];
 
   let lang = 'en';
   try { lang = localStorage.getItem('brz_lang') || ''; } catch (e) { lang = ''; }
