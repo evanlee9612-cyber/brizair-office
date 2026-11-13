@@ -33,6 +33,8 @@
     // stock
     'Aircon units': '에어컨 유닛', 'Parts': '부품', 'LG report': 'LG 보고', 'In / Out': '입출고', 'All': '전체', 'In stock': '재고 있음',
     'Zero stock': '재고 0', 'Nothing found': '찾는 게 없어요', 'In stock now': '지금 재고', 'Type': '종류', 'SRP': '손님가', 'Cost': '원가',
+    'Aircons on hand': '에어컨 재고', 'Parts on hand': '부품 재고', 'Front panels': '패널', 'Value at cost': '원가 합계', 'Value at SRP': '손님가 합계',
+    'Value at LG cost': 'LG 원가 합계', 'Value at customer price': '손님가 합계', 'Values include front panels.': '금액에는 패널도 들어 있어요.',
     'Supplier': '공급처', 'Part no.': '부품번호', 'Group': '분류', 'Customer price': '손님가', 'LG cost': 'LG 원가', 'Recent moves': '최근 입출고',
     'No moves recorded': '입출고 기록 없음', 'What?': '무엇?', 'Aircon unit': '에어컨 유닛', 'Part': '부품', 'Model *': '모델 *', 'Part *': '부품 *',
     'IN or OUT *': '들어옴(IN) / 나감(OUT) *', 'Qty *': '수량 *', 'Date': '날짜', 'Customer / supplier': '손님 / 공급처', 'PO / invoice #': 'PO / 인보이스 번호',
@@ -171,7 +173,7 @@
     [/^Good morning, (.+)$/, '좋은 아침이에요, $1님'], [/^Good afternoon, (.+)$/, '안녕하세요, $1님'], [/^Good evening, (.+)$/, '수고 많으셨어요, $1님'],
     [/^(\d+) jobs?$/, '$1건'], [/^(\d+) units?$/, '$1대'], [/^(\d+) customers?$/, '손님 $1명'], [/^Units \((\d+)\)$/, '유닛 ($1)'],
     [/^Uploaded \((\d+)\)$/, '올린 자료 ($1)'], [/^All (\d+)$/, '전체 $1'], [/^Tomorrow · (.+)$/, '내일 · $1'], [/^Tomorrow$/, '내일'],
-    [/^In stock now: (.+)$/, '지금 재고: $1'], [/^Total on hand: ?$/, '전체 재고: '], [/^\+(\d+) more$/, '+$1건 더'],
+    [/^In stock now: (.+)$/, '지금 재고: $1'], [/^Total on hand: ?$/, '전체 재고: '], [/^(\d+) pcs have no price in the sheet \(not counted\)$/, '$1개는 시트에 가격이 없어 합계에서 빠졌어요'], [/^\+(\d+) more$/, '+$1건 더'],
     [/^Search (.+)…$/, '검색…'], [/^Logged in as ?$/, '로그인: '], [/^Saved ✓ (.+)$/, '저장 ✓ $1'], [/^Status: (.+)$/, '상태: $1'],
     [/^Could not load: (.+)$/, '불러오기 실패: $1'], [/^Choose the (model|part) from the list$/, '목록에서 골라 주세요'],
     [/^Stock is only (-?\d+)\. Record OUT (\d+) anyway\?$/, '재고가 $1개뿐이에요. 그래도 OUT $2개를 기록할까요?'],
@@ -179,7 +181,7 @@
     [/^Payment saved ✓ (.+)$/, '입금 저장 ✓ $1'], [/^Update status: (.+)$/, '상태 정리: $1'], [/^Invoice overdue: (.+)$/, '기한 지난 인보이스: $1'],
     [/^Follow up quotation: (.+)$/, '견적 후속 연락: $1'], [/^Book cleaning: (.+)$/, '청소 예약: $1'], [/^GPT needs information \((\d+)\)$/, 'GPT가 모르는 것 ($1)'], [/^Invoice saved, but could not add to Money: (.+)$/, '인보이스는 저장됐지만 돈에 추가 못 함: $1'],
     [/^(.+) → (Scheduled|Confirmed|Done|Moved|Cancelled)$/, '$1 → $2'], [/^Sent\. GPT will answer in about 20–60 seconds…$/, '보냈어요. GPT가 20~60초 안에 답해요…'],
-    [/^GPT is reading the sheet…$/, 'GPT가 시트를 읽는 중…'], [/^Sent\. GPT will answer in about 20–60 seconds…$/, '보냈어요. GPT가 20~60초 안에 답해요…'],
+    [/^GPT is reading the sheet…$/, 'GPT가 시트를 읽는 중…'],
     [/^GPT reached its ChatGPT usage limit\. Please ask again after (.+)\.$/, 'GPT 사용 한도에 걸렸어요. $1 이후에 다시 물어봐 주세요.'], [/^GPT reached its ChatGPT usage limit\. Please ask again later\.$/, 'GPT 사용 한도에 걸렸어요. 잠시 뒤에 다시 물어봐 주세요.'], [/^Waiting — Sir Kim's PC is offline\. It will answer when the PC is on\.$/, '대기 중 — 대표님 컴퓨터가 꺼져 있어요. 켜지면 답해요.'], [/^No jobs\. ?$/, '일정 없음. '], [/^\+ Add a job on this day$/, '+ 이날 일정 추가']
   ];
   const FRAG = [[/\bInstalled (?=[A-Z—])/g, '설치 '], [/ · Last cleaning /g, ' · 마지막 청소 '], [/ · Next$/g, ' · 다음'], [/^Next$/g, '다음'],
