@@ -271,6 +271,21 @@
   }
   function stockList(kind) { return kind === 'part' ? (D().parts || []) : (D().units || []); }
   function stockLog(kind) { return kind === 'part' ? (D().partLog || []) : (D().unitLog || []); }
+  // front panels sit in the UNITS tab but are not aircons
+  const isPanel = x => /^PT-/i.test(x.item || '') || /front panel/i.test(x.type || '');
+  // pieces on hand + money value (qty × cost, qty × selling price) of what is in stock now
+  function stockSum(list, kind) {
+    const r = {n: 0, panels: 0, cost: 0, sell: 0, noPrice: 0};
+    list.forEach(x => {
+      const q = Math.max(0, Number(x.now) || 0);
+      if (!q) return;
+      if (kind === 'unit' && isPanel(x)) r.panels += q; else r.n += q;
+      const c = Number(x.cost) || 0, s = Number(kind === 'part' ? x.price : x.srp) || 0;
+      if (!c || !s) r.noPrice += q;
+      r.cost += q * c; r.sell += q * s;
+    });
+    return r;
+  }
   function cleaningDue() {
     const t = today(), until = addDays(t, 30), from = addDays(t, -60);
     return (D().customers || []).filter(c => c.nc && c.nc >= from && c.nc <= until).sort((a, b) => a.nc.localeCompare(b.nc));
@@ -343,7 +358,7 @@
     const week = (D().schedule || []).filter(j => j.date > t && j.date <= addDays(t, 7) && j.status !== 'Cancelled').length;
     const unpaid = (D().receivables || []).filter(r => r.bal > 0);
     const arTotal = D().arTotal != null ? D().arTotal : unpaid.reduce((s, r) => s + r.bal, 0);
-    const units = (D().units || []).reduce((s, u) => s + Math.max(0, u.now), 0);
+    const units = stockSum(D().units || [], 'unit').n;
     const name = S.me ? (/^sir\b/i.test(S.me.name) ? S.me.name : S.me.name.split(' ')[0]) : '';
     return `
       <h1>${greet()}, ${esc(name)}</h1>
@@ -432,7 +447,7 @@
     if (q) list = list.filter(x => lc([x.item, x.type, x.hp, x.pn, x.group, x.notes].join(' ')).includes(q));
     const groups = new Map();
     list.forEach(x => { const g = (kind === 'part' ? x.group : x.type) || 'Other'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(x); });
-    const all = stockList(kind), total = all.reduce((s, x) => s + Math.max(0, x.now), 0);
+    const all = stockList(kind), sm = stockSum(all, kind), unit = kind === 'unit';
     return `
       <div class="row between wrap" style="margin-bottom:12px">
         <div class="seg"><button class="${kind === 'unit' ? 'on' : ''}" data-act="stockKind" data-k="unit">Aircon units</button><button class="${kind === 'part' ? 'on' : ''}" data-act="stockKind" data-k="part">Parts</button></div>
@@ -443,7 +458,14 @@
       <div class="chips" style="margin-bottom:12px">
         ${[['all', 'All ' + all.length], ['in', 'In stock'], ['zero', 'Zero stock']].map(c => `<button class="chip ${S.stockFilter === c[0] ? 'on' : ''}" data-act="stockFilter" data-f="${c[0]}">${c[1]}</button>`).join('')}
       </div>
-      <p class="muted small" style="margin:-4px 0 10px">Total on hand: <b>${total}</b></p>
+      <div class="stats">
+        <div class="stat"><span>${unit ? 'Aircons on hand' : 'Parts on hand'}</span><b>${sm.n}</b></div>
+        ${unit ? `<div class="stat"><span>Front panels</span><b>${sm.panels}</b></div>` : ''}
+        <div class="stat"><span>${unit ? 'Value at cost' : 'Value at LG cost'}</span><b style="font-size:20px">${peso(sm.cost, 0)}</b></div>
+        <div class="stat"><span>${unit ? 'Value at SRP' : 'Value at customer price'}</span><b style="font-size:20px">${peso(sm.sell, 0)}</b></div>
+      </div>
+      ${unit && sm.panels ? '<p class="muted small" style="margin:-4px 0 6px">Values include front panels.</p>' : ''}
+      ${sm.noPrice ? `<p class="muted small" style="margin:-2px 0 10px">${sm.noPrice} pcs have no price in the sheet (not counted)</p>` : ''}
       <div id="stockList">${stockGroupsHtml(groups, kind)}</div>`;
   };
   function stockGroupsHtml(groups, kind) {
