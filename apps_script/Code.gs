@@ -50,7 +50,7 @@ function doPost(e) {
 /** which data sections each save changes (sent back right away) */
 var CHANGES = {addJob: ['schedule', 'log'], updateJob: ['schedule', 'log'], stockMove: ['stock', 'log'], payment: ['money', 'log'],
   newReceivable: ['money', 'log'], cleaningDone: ['customers', 'log'], addInstall: ['customers', 'log'], saveQuote: ['docs', 'log'],
-  quoteStatus: ['docs', 'log'], jobPhoto: ['schedule', 'log'], kNote: ['ask', 'log'], kUpload: ['ask', 'log'], kHide: ['ask', 'log'], askRate: ['ask', 'log']};
+  quoteStatus: ['docs', 'log'], resAdd: ['stock', 'log'], resSet: ['stock', 'log'], jobPhoto: ['schedule', 'log'], kNote: ['ask', 'log'], kUpload: ['ask', 'log'], kHide: ['ask', 'log'], askRate: ['ask', 'log']};
 
 var ACTIONS = {
   boot: boot_,
@@ -58,6 +58,8 @@ var ACTIONS = {
   addJob: addJob_,
   updateJob: updateJob_,
   stockMove: stockMove_,
+  resAdd: resAdd_,
+  resSet: resSet_,
   payment: payment_,
   newReceivable: newReceivable_,
   cleaningDone: cleaningDone_,
@@ -297,7 +299,7 @@ function boot_(req, me, parts) {
   var out = {ok: true, me: {name: me.name, role: me.role}, at: new Date().toISOString(), v: VERSION, sections: parts || SECTIONS,
     sheetUrl: 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit', jobs: JOBS, statuses: STATUSES, methods: METHODS};
   var T, i, names = [];
-  if (want.stock) names.push('UNITS', 'PARTS', 'UNIT IN-OUT', 'PART IN-OUT');
+  if (want.stock) names.push('UNITS', 'PARTS', 'UNIT IN-OUT', 'PART IN-OUT', RES_TAB);
   if (want.schedule) names.push('SCHEDULE');
   if (want.money) names.push('RECEIVABLES', 'PAYMENTS');
   if (want.customers) names.push('CUSTOMERS');
@@ -320,6 +322,7 @@ function boot_(req, me, parts) {
     });
     out.unitLog = moves_('UNIT IN-OUT');
     out.partLog = moves_('PART IN-OUT');
+    out.unitRes = resRows_();
     tm.stock = Date.now() - t0;
   }
   if (want.schedule) {
@@ -439,6 +442,80 @@ function moves_(name) {
     return {r: i + 1, date: d_(r[col_(T, 'date')]), item: item, dir: s_(r[col_(T, 'in / out')]).toUpperCase(),
       qty: n_(r[col_(T, 'qty')]) || 0, party: s_(r[col_(T, 'customer / supplier')]), ref: s_(r[col_(T, 'po / invoice #')]),
       by: s_(r[col_(T, 'by')]), notes: s_(r[col_(T, 'notes')])};
+  });
+}
+
+// ───────────────────────── units reserved for a project (still in stock until installed) ─────────────────────────
+var RES_TAB = 'UNIT RESERVED';
+var RES_HEAD = ['ID', 'Date (날짜)', 'Item (모델)', 'Qty (수량)', 'Customer / Project (손님·현장)', 'PO / Ref (PO 번호)', 'Status (상태)',
+  'Done date (끝난 날)', 'By (누가)', 'Notes (메모)'];
+function resSheet_() {
+  var ss = ss_(), sh = ss.getSheetByName(RES_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(RES_TAB);
+    sh.getRange(1, 1, 1, RES_HEAD.length).setValues([RES_HEAD]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+function resRows_() {
+  if (!(_pre && _pre[RES_TAB]) && !ss_().getSheetByName(RES_TAB)) return [];
+  var T = table_(RES_TAB);
+  return rows_(T, function (r, i) {
+    var item = s_(r[col_(T, 'item')]); if (!item) return null;
+    return {r: i + 1, id: s_(r[col_(T, 'id')]), date: d_(r[col_(T, 'date')]), item: item, qty: n_(r[col_(T, 'qty')]) || 0,
+      party: s_(r[col_(T, 'customer / project')]), ref: s_(r[col_(T, 'po / ref')]), status: s_(r[col_(T, 'status')]) || 'Reserved',
+      done: d_(r[colOpt_(T, 'done date')]), by: s_(r[colOpt_(T, 'by')]), notes: s_(r[colOpt_(T, 'notes')])};
+  });
+}
+function resAdd_(req, me) {
+  var x = req.res || {}, qty = Math.round(+x.qty);
+  if (!(qty > 0 && qty < 1000)) throw bad_('Qty must be 1 or more');
+  if (!String(x.party || '').trim()) throw bad_('Write the customer / project');
+  return withLock_(function () {
+    var L = table_('UNITS'), ic = col_(L, 'item'), found = false;
+    for (var i = 1; i < L.vals.length; i++) if (s_(L.vals[i][ic]) === x.item) { found = true; break; }
+    if (!found) throw bad_('Item not found in UNITS: ' + x.item);
+    resSheet_();
+    var T = table_(RES_TAB), row = lastRowOf_(T, col_(T, 'item')) + 1;
+    writeRow_(T, row, {'id': id_('R'), 'date': toDate_(x.date || today_()), 'item': x.item, 'qty': qty, 'customer / project': clip_(x.party, 160),
+      'po / ref': clip_(x.ref, 80), 'status': 'Reserved', 'by': me.name, 'notes': clip_(x.notes, 300)});
+    done_(me, 'Unit reserved', qty + ' × ' + x.item + ' · ' + x.party + (x.ref ? ' · ' + x.ref : ''), '📌');
+    return {ok: true, r: row};
+  });
+}
+/** Installed (→ stock OUT, same qty) or Cancelled. Part of the qty: the rest stays reserved. */
+function resSet_(req, me) {
+  var st = String(req.status || ''), r = +req.r;
+  if (st !== 'Installed' && st !== 'Cancelled') throw bad_('Bad status');
+  return withLock_(function () {
+    var T = table_(RES_TAB);
+    if (!(r >= 2 && r <= T.vals.length)) throw bad_('Not found. Please refresh.');
+    var cur = T.vals[r - 1], id = s_(cur[col_(T, 'id')]);
+    if (!id || id !== String(req.id || '')) throw bad_('This was changed by someone else. Please refresh.');
+    var now = s_(cur[col_(T, 'status')]) || 'Reserved';
+    if (now !== 'Reserved') throw bad_('Already ' + now);
+    var have = n_(cur[col_(T, 'qty')]) || 0, qty = Math.round(+req.qty || have);
+    if (!(qty > 0 && qty <= have)) throw bad_('Qty must be 1 to ' + have);
+    var item = s_(cur[col_(T, 'item')]), party = s_(cur[col_(T, 'customer / project')]), ref = s_(cur[col_(T, 'po / ref')]);
+    var day = toDate_(req.date || today_());
+    if (st === 'Installed') {
+      var M = table_('UNIT IN-OUT'), mr = lastRowOf_(M, col_(M, 'item')) + 1;
+      writeRow_(M, mr, {'date': day, 'item': item, 'in / out': 'OUT', 'qty': qty, 'customer / supplier': clip_(party, 120),
+        'po / invoice #': clip_(ref, 60), 'by': me.name, 'notes': clip_('Installed (reserved ' + id + ')' + (req.notes ? ' ' + req.notes : ''), 300)});
+    }
+    if (qty < have) {
+      T.sh.getRange(r, col_(T, 'qty') + 1).setValue(have - qty);
+      var nr = lastRowOf_(T, col_(T, 'item')) + 1;
+      writeRow_(T, nr, {'id': id_('R'), 'date': cur[col_(T, 'date')], 'item': item, 'qty': qty, 'customer / project': clip_(party, 160),
+        'po / ref': clip_(ref, 80), 'status': st, 'done date': day, 'by': me.name, 'notes': clip_('Part of ' + id + (req.notes ? ' · ' + req.notes : ''), 300)});
+    } else {
+      var o = {'status': st, 'done date': day};
+      if (req.notes) o['notes'] = clip_((s_(cur[colOpt_(T, 'notes')]) ? s_(cur[colOpt_(T, 'notes')]) + ' · ' : '') + req.notes, 300);
+      writeRow_(T, r, o);
+    }
+    done_(me, st === 'Installed' ? 'Reserved unit installed' : 'Reservation cancelled', qty + ' × ' + item + ' · ' + party, st === 'Installed' ? '🚚' : '✖');
+    return {ok: true};
   });
 }
 

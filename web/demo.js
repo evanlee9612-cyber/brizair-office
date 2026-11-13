@@ -54,6 +54,8 @@
     const partLog = [{r: 2, date: add(-1), item: 'Capacitor 35uF', dir: 'OUT', qty: 1, party: 'Pampanga Dental Clinic', ref: '', by: 'Ladie', notes: ''}];
     const D = {ok: true, me: null, sheetUrl: 'https://docs.google.com/spreadsheets/', jobs: ['Install', 'Service (AS)', 'Cleaning', 'Survey', 'Delivery', 'Pull-out', 'Meeting', 'Other'],
       statuses: ['Scheduled', 'Confirmed', 'Done', 'Moved', 'Cancelled'], methods: ['Cash', 'Bank', 'GCash', 'Check', 'Other'],
+      unitRes: [{r: 2, id: 'DEMO-R-1', date: add(-20), item: 'APNQ36GR5A4/AUUQ36GH4', qty: 2, party: 'Blue Lagoon Hotel / New wing', ref: 'PO 1021', status: 'Reserved', by: 'Ladie', notes: ''},
+        {r: 3, id: 'DEMO-R-2', date: add(-3), item: 'ZTNQ18GTLA0/ZUAB1', qty: 1, party: 'Golden Star Office', ref: '', status: 'Reserved', by: 'Ladie', notes: 'waiting for LG delivery'}],
       units, parts, unitLog, partLog, schedule: sched, receivables, payments: [], customers, quotes: [], log: [], arTotal: null, ask: [], know: [], aiOnline: true};
     recalc(D);
     return D;
@@ -127,6 +129,16 @@
       const m = b.move, L = m.kind === 'part' ? D.partLog : D.unitLog;
       L.push({r: ++seq, date: m.date, item: m.item, dir: m.dir, qty: +m.qty, party: m.party, ref: m.ref, by: me.name, notes: m.notes});
       log(me, (m.kind === 'part' ? 'Part ' : 'Unit ') + m.dir, `${m.qty} × ${m.item}${m.party ? ' · ' + m.party : ''}`);
+    } else if (a === 'resAdd') {
+      const x = b.res; D.unitRes = D.unitRes || [];
+      D.unitRes.push({r: ++seq, id: 'DEMO-R-' + seq, date: x.date, item: x.item, qty: +x.qty, party: x.party, ref: x.ref, status: 'Reserved', by: me.name, notes: x.notes});
+      log(me, 'Unit reserved', `${x.qty} × ${x.item} · ${x.party}`);
+    } else if (a === 'resSet') {
+      const x = (D.unitRes || []).find(k => k.r === b.r && k.id === b.id) || err('Not found. Please refresh.');
+      if (x.status !== 'Reserved') err('Already ' + x.status);
+      if (b.status === 'Installed') D.unitLog.push({r: ++seq, date: b.date, item: x.item, dir: 'OUT', qty: b.qty, party: x.party, ref: x.ref, by: me.name, notes: 'Installed (reserved ' + x.id + ')'});
+      if (b.qty < x.qty) { x.qty -= b.qty; D.unitRes.push(Object.assign({}, x, {r: ++seq, id: 'DEMO-R-' + seq, qty: b.qty, status: b.status, done: b.date})); } else { x.status = b.status; x.done = b.date; }
+      log(me, b.status === 'Installed' ? 'Reserved unit installed' : 'Reservation cancelled', `${b.qty} × ${x.item} · ${x.party}`);
     } else if (a === 'payment') {
       const p = b.pay; D.payments.push({r: ++seq, date: p.date, project: p.project, amount: +p.amount, method: p.method, by: p.by, notes: p.notes});
       log(me, 'Payment', `₱${(+p.amount).toLocaleString('en-US', {minimumFractionDigits: 2})} · ${p.project} · ${p.method}`);
