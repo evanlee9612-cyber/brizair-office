@@ -309,6 +309,7 @@ table.tbl { border-collapse: collapse; width: 100%; font-size: 13px; }
 .qitems { display: flex; flex-direction: column; gap: 10px; }
 .qline { border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 8px; align-items: end; }
 .qline .desc { grid-column: 1 / -1; }
+.qline .model { grid-column: 1 / 3; }
 .qline input { border: 1px solid #cfd8e3; border-radius: 10px; padding: 9px 10px; width: 100%; font-size: 15px; }
 .qline small { display: block; font-size: 12px; color: var(--ink-3); font-weight: 600; margin-bottom: 3px; }
 .qline .amt { font-weight: 800; padding: 9px 0; text-align: right; }
@@ -405,3 +406,27 @@ a.btn { text-decoration: none; color: inherit; }
 .grid2 > *, .card, .stats > * { min-width: 0; }
 html, body { overflow-x: hidden; }
 .f2 > .f, .f input, .f select, .f textarea { min-width: 0; max-width: 100%; }
+
+/* BRIZAIR quotation form (same layout as NEW QUOTE FOR ACU 2026.xlsx) */
+.doc.qf { font-size: 11.5px; }
+.qf-head { display: flex; align-items: center; gap: 16px; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 10px; }
+.qf-logo { text-align: center; font-weight: 700; font-size: 11px; width: 190px; flex: none; }
+.qf-logo img { height: 56px; display: block; margin: 0 auto 4px; }
+.qf-co { flex: 1; font-size: 11px; line-height: 1.45; }
+.qf-name { font-size: 26px; font-weight: 800; line-height: 1.1; margin-bottom: 2px; }
+.qf-to td { font-size: 11.5px; padding: 2px 4px; }
+.qf-to .qf-r { width: 30%; }
+.qf-title { text-align: center; font-size: 24px; font-weight: 800; letter-spacing: .06em; margin: 10px 0 2px; }
+.qf-intro { text-align: center; font-weight: 700; margin: 0 0 8px; }
+.qf-items th { background: #8b1538; color: #fff; text-align: center; font-size: 11px; padding: 5px 6px; }
+.qf-items td { font-size: 11px; padding: 4px 6px; }
+.qf-items .qf-total td { font-weight: 800; font-size: 12.5px; background: #f3f5f8; }
+.qf-notes { margin: 10px 0 0; }
+.qf-terms { margin-top: 12px; }
+.qf-th { font-size: 14px; font-weight: 800; margin-bottom: 4px; }
+.qf-sec { margin-bottom: 5px; break-inside: avoid; }
+.qf-sec > b { font-size: 11.5px; }
+.qf-sec ul { margin: 2px 0 0 18px; padding: 0; font-size: 10px; line-height: 1.4; }
+.qf-sec li.nob { list-style: none; margin-left: -18px; }
+.qf-sign { display: grid; grid-template-columns: 1fr 1fr 1fr 1.3fr; gap: 18px; margin-top: 22px; font-size: 10.5px; break-inside: avoid; }
+.qf-sign .ln { display: block; border-bottom: 1px solid #000; height: 34px; margin-bottom: 3px; }

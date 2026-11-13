@@ -117,7 +117,7 @@
     const partial = Array.isArray(d.sections) && d.sections.length < 7 && S.D;
     S.D = partial ? Object.assign({}, S.D, d) : d;  // a save sends back only the sections it changed
     S.me = d.me || S.me;
-    LS.set(KEY + 'data', d);
+    LS.set(KEY + 'data', S.D);
     setSync('ok');
     S._lastRefresh = Date.now();
     return true;
@@ -283,6 +283,20 @@
       const c = Number(x.cost) || 0, s = Number(kind === 'part' ? x.price : x.srp) || 0;
       if (!c || !s) r.noPrice += q;
       r.cost += q * c; r.sell += q * s;
+    });
+    return r;
+  }
+  // units reserved for a project (tab UNIT RESERVED): still in stock until installed
+  const resOpen = () => (D().unitRes || []).filter(x => (x.status || 'Reserved') === 'Reserved');
+  function resByItem() { const m = new Map(); resOpen().forEach(x => m.set(x.item, (m.get(x.item) || 0) + (+x.qty || 0))); return m; }
+  // same as Ladie's Excel "Summary of Inventory Report": on hand → reserved (uninstalled) → after projects, at cost
+  function afterProject(units) {
+    const rm = resByItem(), r = {resN: 0, resPanels: 0, resCost: 0, afterN: 0, afterPanels: 0, afterCost: 0, waiting: 0};
+    units.forEach(x => {
+      const now = Math.max(0, +x.now || 0), want = rm.get(x.item) || 0, held = Math.min(now, want), free = now - held, c = +x.cost || 0;
+      r.waiting += want - held;
+      if (isPanel(x)) { r.resPanels += held; r.afterPanels += free; } else { r.resN += held; r.afterN += free; }
+      r.resCost += held * c; r.afterCost += free * c;
     });
     return r;
   }
@@ -466,13 +480,39 @@
       </div>
       ${unit && sm.panels ? '<p class="muted small" style="margin:-4px 0 6px">Values include front panels.</p>' : ''}
       ${sm.noPrice ? `<p class="muted small" style="margin:-2px 0 10px">${sm.noPrice} pcs have no price in the sheet (not counted)</p>` : ''}
+      ${unit ? resCardHtml(all, sm) : ''}
       <div id="stockList">${stockGroupsHtml(groups, kind)}</div>`;
   };
+  function resCardHtml(all, sm) {
+    const ap = afterProject(all), open = resOpen(), byItem = new Map(all.map(x => [x.item, x]));
+    const pcs = (n, p) => n + (p ? ` + ${p} panel${p > 1 ? 's' : ''}` : '');
+    const groups = new Map();
+    open.forEach(x => { const k = x.party || '—'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(x); });
+    const used = new Map();  // stock already taken by earlier reservations (oldest first)
+    const rowHtml = x => {
+      const u = byItem.get(x.item) || {}, now = Math.max(0, +u.now || 0), before = used.get(x.item) || 0;
+      const held = Math.max(0, Math.min(+x.qty || 0, now - before)); used.set(x.item, before + (+x.qty || 0));
+      const short = (+x.qty || 0) - held;
+      return `<button class="item" data-act="res" data-r="${x.r}"><span class="grow"><div class="t clip">${esc(x.qty + ' × ' + x.item)}</div>
+        <div class="s clip">${esc([x.ref, fmtD(x.date, {year: 'numeric'}), x.notes].filter(Boolean).join(' · '))}</div></span>
+        <span class="r">${held && u.cost ? `<div class="num small" style="font-weight:700">${peso(held * u.cost, 0)}</div>` : ''}${short ? `<span class="pill p-UNPAID">${short} not in stock</span>` : ''}</span></button>`;
+    };
+    return `<div class="card"><div class="card-h"><h2>After current projects</h2><button class="btn sm" data-act="resNew">${ic('plus')} Reserve for a project</button></div>
+      <p class="muted small" style="margin-top:0">Reserved = sold to a project but not installed yet (still in our stock). Values at cost.</p>
+      <div class="stats" style="margin-bottom:10px">
+        <div class="stat"><span>On hand now</span><b style="font-size:19px">${pcs(sm.n, sm.panels)}</b><div class="muted small num">${peso(sm.cost, 2)}</div></div>
+        <div class="stat"><span>Reserved (not installed)</span><b style="font-size:19px">${pcs(ap.resN, ap.resPanels)}</b><div class="muted small num">${peso(ap.resCost, 2)}</div></div>
+        <div class="stat"><span>Free after projects</span><b style="font-size:19px">${pcs(ap.afterN, ap.afterPanels)}</b><div class="muted small num" style="font-weight:800;color:var(--ink)">${peso(ap.afterCost, 2)}</div></div>
+        ${ap.waiting ? `<div class="stat"><span>Reserved, not in stock</span><b>${ap.waiting}</b><div class="muted small">waiting for delivery</div></div>` : ''}
+      </div>
+      ${open.length ? Array.from(groups).map(([g, xs]) => `<h2 class="small" style="font-size:14px;color:var(--ink-2);margin:10px 0 2px">${esc(g)}</h2><div class="list">${xs.map(rowHtml).join('')}</div>`).join('')
+        : '<div class="empty">No reserved units</div>'}</div>`;
+  }
   function stockGroupsHtml(groups, kind) {
     if (!groups.size) return '<div class="card"><div class="empty">Nothing found</div></div>';
     return Array.from(groups).map(([g, xs]) => `<div class="card"><div class="card-h"><h2 class="small" style="font-size:14px;color:var(--ink-2)">${esc(g)}</h2><span class="muted small">${xs.length}</span></div><div class="list">
       ${xs.map(x => `<button class="item" data-act="stockItem" data-kind="${kind}" data-r="${x.r}">
-        <span class="grow"><div class="t">${esc(x.item)}</div><div class="s clip">${esc(kind === 'part' ? [x.pn, x.price ? peso(x.price) : '', x.cost ? 'LG ' + peso(x.cost) : ''].filter(Boolean).join(' · ') : [x.hp, x.srp ? 'SRP ' + peso(x.srp, 0) : '', x.cost ? 'cost ' + peso(x.cost, 0) : ''].filter(Boolean).join(' · '))}</div></span>
+        <span class="grow"><div class="t">${esc(x.item)}</div><div class="s clip">${esc(kind === 'part' ? [x.pn, x.price ? peso(x.price) : '', x.cost ? 'LG ' + peso(x.cost) : ''].filter(Boolean).join(' · ') : [x.hp, x.srp ? 'SRP ' + peso(x.srp, 0) : '', x.cost ? 'cost ' + peso(x.cost, 0) : '', (resByItem().get(x.item) || 0) ? 'reserved ' + resByItem().get(x.item) : ''].filter(Boolean).join(' · '))}</div></span>
         <span class="qty ${x.now > 0 ? 'has' : 'zero'}">${x.now}</span></button>`).join('')}</div></div>`).join('');
   }
   VIEWS.stock.after = () => {
@@ -624,24 +664,24 @@
         <div class="f2"><div class="f"><label>Company</label><input id="q_company" value="${esc(q.company)}"></div><div class="f"><label>Contact person</label><input id="q_attn" value="${esc(q.attn)}"></div></div>
         <div class="f"><label>Address</label><input id="q_address" value="${esc(q.address)}"></div>
         <div class="f2"><div class="f"><label>Phone</label><input id="q_phone" value="${esc(q.phone)}" inputmode="tel"></div><div class="f"><label>Email</label><input id="q_email" value="${esc(q.email)}" inputmode="email"></div></div>
-        <div class="f"><label>Project / subject</label><input id="q_project" value="${esc(q.project)}" placeholder="e.g. Supply and installation of 2 units split type"></div>
+        <div class="f"><label>${inv ? 'Project / subject' : 'Project site'}</label><input id="q_project" value="${esc(q.project)}" placeholder="${inv ? 'e.g. Supply and installation of 2 units split type' : 'e.g. Dia Town Commercial Bldg. 2nd Flr'}"></div>
         ${inv ? `<div class="f2"><div class="f"><label>Invoice date</label><input id="q_date" type="date" value="${esc(q.date)}"></div><div class="f"><label>Due date</label><input id="q_due" type="date" value="${esc(q.due || '')}"></div></div>
           <div class="f2"><div class="f"><label>Customer P.O. no.</label><input id="q_po" value="${esc(q.po || '')}"></div><div class="f"><label>Payment terms</label><input id="q_termsShort" value="${esc(q.termsShort || '')}" placeholder="e.g. 30 days, COD"></div></div>
           <div class="f2"><div class="f"><label>Customer TIN</label><input id="q_tin" value="${esc(q.tin || '')}"></div><div class="f"><label>Business style</label><input id="q_style" value="${esc(q.style || '')}"></div></div>
           ${q.quoteRef ? `<p class="muted small">From quotation ${esc(q.quoteRef)}</p>` : ''}`
-        : `<div class="f2"><div class="f"><label>Date</label><input id="q_date" type="date" value="${esc(q.date)}"></div><div class="f"><label>Valid for</label><input id="q_valid" value="${esc(q.valid)}" placeholder="e.g. 15 days"></div></div>`}
+        : `<div class="f2"><div class="f"><label>Date</label><input id="q_date" type="date" value="${esc(q.date)}"></div><div class="f"><label>Valid until</label><input id="q_validUntil" type="date" value="${esc(q.validUntil || '')}"></div></div>${q.valid ? `<p class="muted small">Old “valid for”: ${esc(q.valid)}</p>` : ''}`}
       </div>
       <div class="card"><div class="card-h"><h2>Items</h2></div>
         <div class="f pick" style="margin-bottom:10px"><input id="q_add" placeholder="➕ Add from stock: type model or part…" autocomplete="off"><div class="pick-list hidden" id="q_addpick"></div></div>
         <div class="qitems" id="q_items"></div>
-        <div class="btns" style="margin-top:10px"><button class="btn sm" data-act="qAddLine" data-d="Installation (standard)">+ Installation</button><button class="btn sm" data-act="qAddLine" data-d="Excess copper pipes & materials">+ Materials</button><button class="btn sm" data-act="qAddLine" data-d="">+ Other line</button></div>
+        <div class="btns" style="margin-top:10px">${[['10ft Basic Installation', 'Unit'], ['Indoor & Outdoor Bracket', 'Set'], ['Dismantle Old ACU', 'Unit'], ['Excess Pipes', 'Meter']].map(x => `<button class="btn sm" data-act="qAddLine" data-d="${x[0]}" data-u="${x[1]}">+ ${x[0]}</button>`).join('')}<button class="btn sm" data-act="qAddLine" data-d="" data-u="">+ Other line</button></div>
         <div class="f2 mt"><div class="f"><label>Discount (₱)</label><input id="q_disc" inputmode="decimal" value="${q.discount || ''}" placeholder="0"></div>
-          <div class="f"><label>VAT</label><select id="q_vat">${[['incl', 'Prices include 12% VAT'], ['add', 'Add 12% VAT'], ['none', 'No VAT line']].map(v => `<option value="${v[0]}" ${q.vat === v[0] ? 'selected' : ''}>${v[1]}</option>`).join('')}</select></div></div>
+          <div class="f"><label>VAT</label><select id="q_vat">${[['none', inv ? 'No VAT line' : 'Excluding VAT (BRIZAIR form)'], ['incl', 'Prices include 12% VAT'], ['add', 'Add 12% VAT']].map(v => `<option value="${v[0]}" ${q.vat === v[0] ? 'selected' : ''}>${v[1]}</option>`).join('')}</select></div></div>
         <div class="qtot" id="q_tot"></div>
       </div>
       ${inv ? `<div class="card"><div class="f"><label>Payment details (bank / GCash) — printed on the invoice</label><textarea id="q_pay" placeholder="e.g. BDO · Account name: BRIZAIR CORP · Account no. ...">${esc(q.pay || '')}</textarea><div class="hint">Saved on this phone for the next invoice.</div></div>
         ${!ex ? `<label class="row small" style="font-weight:600"><input type="checkbox" id="q_ar" checked> Also add to Money (receivables) so payments are tracked</label>` : ''}</div>` : ''}
-      <div class="card"><div class="f" style="margin:0"><label>Notes & terms (printed at the bottom)</label><textarea id="q_terms" placeholder="e.g. payment terms, delivery, warranty">${esc(q.terms)}</textarea></div></div>
+      <div class="card"><div class="f" style="margin:0"><label>${inv ? 'Notes & terms (printed at the bottom)' : 'Extra notes (printed above the terms)'}</label><textarea id="q_terms" placeholder="${inv ? 'e.g. payment terms, delivery, warranty' : 'e.g. Free 1st cleaning · Delivery within 7 days'}">${esc(q.terms)}</textarea>${inv ? '' : '<div class="hint">BRIZAIR terms and conditions (delivery, warranty, exclusions, payment 50/30/20) are always printed.</div>'}</div></div>
       <div class="btns mt savebar">
         <button class="btn primary" data-act="qSave">${ic('check')} Save</button>
         <button class="btn" data-act="qSave" data-print="1">${ic('print')} Save & print / PDF</button>
@@ -652,7 +692,7 @@
   function newQuote(cust, type) {
     const g = cust ? custGroups().get(cust) : null;
     return {type: type || 'quote', due: '', po: '', termsShort: '', tin: '', style: '', pay: type === 'invoice' ? LS.get('brz_paydetails', '') : '', customer: cust || '', company: g ? Array.from(g.co)[0] || '' : '', address: g ? Array.from(g.locs)[0] || '' : '', attn: '', phone: '', email: '',
-      project: '', date: today(), valid: '', items: [], discount: 0, vat: 'incl', terms: '', by: S.me ? S.me.name : ''};
+      project: '', date: today(), valid: '', validUntil: '', items: [], discount: 0, vat: type === 'invoice' ? 'incl' : 'none', terms: '', by: S.me ? S.me.name : ''};
   }
   function qCalc(q) {
     const sub = q.items.reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0);
@@ -661,30 +701,41 @@
     const total = q.vat === 'add' ? base + vat : base;
     return {sub, disc, vat, total};
   }
+  // our margin on lines added from stock (selling unit price − cost), for the office only — never printed
+  function qMargin(q) {
+    let sell = 0, cost = 0;
+    q.items.forEach(it => { if (+it.cost > 0) { sell += (+it.qty || 0) * (+it.price || 0); cost += (+it.qty || 0) * (+it.cost); } });
+    return cost ? {m: sell - cost, pct: sell ? Math.round((sell - cost) / sell * 100) : 0} : null;
+  }
   function qRender() {
     const q = S.qd; if (!q || !$('#q_items')) return;
     $('#q_items').innerHTML = q.items.map((it, i) => `<div class="qline" data-i="${i}">
+      <div class="model"><small>Model</small><input data-f="model" value="${esc(it.model || '')}"></div>
+      <div><small>Unit</small><input data-f="unit" value="${esc(it.unit || '')}" list="dlqunit"></div>
+      <button class="iconbtn" data-act="qDel" data-i="${i}" aria-label="Remove">${ic('x')}</button>
       <div class="desc"><small>Description</small><input data-f="desc" value="${esc(it.desc)}"></div>
       <div><small>Qty</small><input data-f="qty" inputmode="numeric" value="${esc(it.qty)}"></div>
+      <div><small>SRP ₱</small><input data-f="srp" inputmode="decimal" value="${esc(it.srp || '')}"></div>
       <div><small>Unit price ₱</small><input data-f="price" inputmode="decimal" value="${esc(it.price)}"></div>
-      <div class="amt"><small>Amount</small>${money((+it.qty || 0) * (+it.price || 0))}</div>
-      <button class="iconbtn" data-act="qDel" data-i="${i}" aria-label="Remove">${ic('x')}</button></div>`).join('') || '<div class="empty">No items yet — add from stock or tap “+ Installation”.</div>';
+      <div class="amt"><small>Amount</small>${money((+it.qty || 0) * (+it.price || 0))}</div></div>`).join('') + dl('dlqunit', ['Unit', 'Set', 'Meter', 'Pc', 'Lot']);
+    if (!q.items.length) $('#q_items').innerHTML = '<div class="empty">No items yet — add from stock or tap “+ 10ft Basic Installation”.</div>';
     qTotals();
   }
   function qTotals() {
     const c = qCalc(S.qd);
     $('#q_tot').innerHTML = `<span>Subtotal</span><b>${money(c.sub)}</b>${c.disc ? `<span>Discount</span><b>−${money(c.disc)}</b>` : ''}
       ${S.qd.vat === 'add' ? `<span>VAT 12%</span><b>${money(c.vat)}</b>` : ''}<span class="grand">Total</span><b class="grand">₱${money(c.total)}</b>
-      ${S.qd.vat === 'incl' ? `<span class="muted small">VAT included</span><b class="muted small">${money(c.vat)}</b>` : ''}`;
+      ${S.qd.vat === 'incl' ? `<span class="muted small">VAT included</span><b class="muted small">${money(c.vat)}</b>` : ''}
+      ${qMargin(S.qd) ? `<span class="muted small">Margin on stock items (not printed)</span><b class="muted small">${money(qMargin(S.qd).m)} (${qMargin(S.qd).pct}%)</b>` : ''}`;
     $$('.qline').forEach(el => { const it = S.qd.items[+el.dataset.i]; if (it) $('.amt', el).innerHTML = '<small>Amount</small>' + money((+it.qty || 0) * (+it.price || 0)); });
   }
   function qRead() {
     const q = S.qd;
-    ['customer', 'company', 'attn', 'address', 'phone', 'email', 'project', 'date', 'valid', 'terms', 'due', 'po', 'termsShort', 'tin', 'style', 'pay'].forEach(k => { const el = $('#q_' + k); if (el) q[k] = el.value.trim(); });
+    ['customer', 'company', 'attn', 'address', 'phone', 'email', 'project', 'date', 'valid', 'validUntil', 'terms', 'due', 'po', 'termsShort', 'tin', 'style', 'pay'].forEach(k => { const el = $('#q_' + k); if (el) q[k] = el.value.trim(); });
     if (q.type === 'invoice' && q.pay) LS.set('brz_paydetails', q.pay);
     q.discount = +($('#q_disc').value.replace(/,/g, '')) || 0;
     q.vat = $('#q_vat').value;
-    q.items = q.items.filter(it => String(it.desc).trim() || +it.price);
+    q.items = q.items.filter(it => String(it.desc || '').trim() || String(it.model || '').trim() || +it.price);
     q.total = Math.round(qCalc(q).total * 100) / 100;
     return q;
   }
@@ -694,7 +745,7 @@
     $('#q_items').addEventListener('input', e => {
       const line = e.target.closest('.qline'); if (!line) return;
       const it = S.qd.items[+line.dataset.i]; const f = e.target.dataset.f;
-      it[f] = f === 'desc' ? e.target.value : e.target.value.replace(/[^\d.]/g, '');
+      it[f] = /^(desc|model|unit)$/.test(f) ? e.target.value : e.target.value.replace(/[^\d.]/g, '');
       qTotals();
     });
     $('#q_disc').addEventListener('input', () => { S.qd.discount = +$('#q_disc').value.replace(/,/g, '') || 0; qTotals(); });
@@ -710,10 +761,10 @@
     });
     picker($('#q_add'), $('#q_addpick'), q => {
       q = lc(q); if (q.length < 2) return [];
-      const u = (D().units || []).filter(x => lc(x.item + ' ' + x.type + ' ' + x.hp).includes(q)).slice(0, 10).map(x => ({t: x.item, s: [x.type, x.hp, 'stock ' + x.now, x.srp != null ? 'SRP ' + peso(x.srp, 0) : ''].filter(Boolean).join(' · '), v: {desc: `LG ${x.item}${x.type ? ' – ' + x.type : ''}${x.hp && x.hp !== '-' ? ' ' + x.hp : ''}`, price: x.srp || ''}}));
-      const p = (D().parts || []).filter(x => lc(x.item + ' ' + x.pn + ' ' + x.group).includes(q)).slice(0, 8).map(x => ({t: x.item, s: [x.group, 'stock ' + x.now, x.price != null ? peso(x.price) : ''].filter(Boolean).join(' · '), v: {desc: `${x.group ? x.group + ' – ' : ''}${x.item}`, price: x.price || ''}}));
+      const u = (D().units || []).filter(x => lc(x.item + ' ' + x.type + ' ' + x.hp).includes(q)).slice(0, 10).map(x => ({t: x.item, s: [x.type, x.hp, 'stock ' + x.now, x.srp != null ? 'SRP ' + peso(x.srp, 0) : ''].filter(Boolean).join(' · '), v: {model: x.item, desc: [x.hp && x.hp !== '-' ? x.hp : '', x.type].filter(Boolean).join(' '), unit: 'Unit', srp: x.srp || '', price: x.srp || '', cost: x.cost || ''}}));
+      const p = (D().parts || []).filter(x => lc(x.item + ' ' + x.pn + ' ' + x.group).includes(q)).slice(0, 8).map(x => ({t: x.item, s: [x.group, 'stock ' + x.now, x.price != null ? peso(x.price) : ''].filter(Boolean).join(' · '), v: {model: x.pn || '', desc: `${x.group ? x.group + ' – ' : ''}${x.item}`, unit: 'Pc', srp: x.price || '', price: x.price || '', cost: x.cost || ''}}));
       return u.concat(p);
-    }, o => { S.qd.items.push({desc: o.v.desc, qty: 1, price: o.v.price}); $('#q_add').value = ''; qRender(); });
+    }, o => { S.qd.items.push(Object.assign({qty: 1}, o.v)); $('#q_add').value = ''; qRender(); });
   };
 
   // LG monthly report
@@ -1034,23 +1085,59 @@
   }
   window.addEventListener('afterprint', () => { document.body.classList.remove('printing'); });
 
+  const QF_TERMS = [
+    ['DELIVERY PERIOD', ['For items currently out of stock, delivery shall be within a maximum lead time of sixty (60) days, subject to stock availability and supplier confirmation.']],
+    ['WARRANTY', ['<b>CAC:</b> 1 year for parts and services · 5 years for Compressor &nbsp;/&nbsp; <b>RAC:</b> 1 year for parts and services · 3 years for PCB (ISB Models) · 10 years for Compressor']],
+    ['WARRANTY EXCLUSIONS', ['<i>Warranty coverage excludes the following:</i>',
+      'Product failure or damage resulting from power failures, power interruptions, or inadequate electrical supply.',
+      'Damage caused by natural disasters or force majeure, including lightning, flooding, earthquakes, strong winds, and fire.',
+      'Defects or damage resulting from abnormal use, misuse, abuse, unauthorized modification, alteration or blown fuses caused by improper use or electrical conditions.',
+      'Tampering with or removal of the product\'s serial number.',
+      'Units installed or serviced by personnel not authorized by LG Electronics Philippines (LGEPH).',
+      'Damage caused by exposure to highly corrosive environments or the entry of insects, vermin or foreign objects into the product.']],
+    ['EXCLUSIONS & ADDITIONAL WORK', ['Masonry, Civil, Plastering, and other structural works.', 'Floor Drain Installation.',
+      'Electrical supply, wiring, and circuit breakers, unless specifically included in the proposal.',
+      'Permits, signed and sealed engineering plans, and other statutory requirements.',
+      'Water pumps and other accessories not supplied with the unit, unless specifically included in the proposal.', 'Routine air-conditioning cleaning.',
+      'Extended refrigerant piping, additional insulation, drain piping, and electrical cables beyond the quoted allowance.',
+      'Any repair or replacement of damaged copper piping occurring during the waiting period shall be subject to additional charges.',
+      'Any adjustment, dismantling, transfer, or relocation of units after installation has been completed shall be charged separately.',
+      '<b>Any additional work or materials not included in the quoted scope shall be subject to separate pricing and approval.</b>']],
+    ['PAYMENT TERMS', ['<b>Payment Schedule:</b> 50% DP upon order confirmation · 30% upon delivery of the unit · 20% upon completion of installation',
+      '<b>Mode of Payment:</b> CASH / CHECK &nbsp; · &nbsp; Check Payable to: <b>BRIZAIR CORP.</b>']]];
   function quoteDoc(q) {
     if (q.type === 'invoice') return invoiceDoc(q);
-    const c = qCalc(q);
-    return `<div class="doc">${letterhead()}
-      <h3>QUOTATION</h3>
-      <table class="noline" style="margin-bottom:10px"><tr><td style="width:60%"><b>To:</b> ${esc(q.customer)}${q.company && q.company !== q.customer ? '<br>' + esc(q.company) : ''}${q.address ? '<br>' + esc(q.address) : ''}
-        ${q.attn ? '<br><b>Attn:</b> ' + esc(q.attn) : ''}${q.phone ? '<br><b>Tel:</b> ' + esc(q.phone) : ''}${q.email ? '<br><b>Email:</b> ' + esc(q.email) : ''}</td>
-        <td><b>Quotation No.:</b> ${esc(q.no || '(draft)')}<br><b>Date:</b> ${esc(fmtMDY(q.date))}${q.valid ? '<br><b>Valid for:</b> ' + esc(q.valid) : ''}<br><b>Prepared by:</b> ${esc(q.by || '')}</td></tr></table>
-      ${q.project ? `<p><b>Subject:</b> ${esc(q.project)}</p>` : ''}
-      <table><thead><tr><th style="width:36px" class="c">#</th><th>Description</th><th style="width:50px" class="c">Qty</th><th style="width:110px" class="r">Unit price</th><th style="width:120px" class="r">Amount</th></tr></thead>
-      <tbody>${q.items.map((it, i) => `<tr><td class="c">${i + 1}</td><td>${esc(it.desc)}</td><td class="c">${esc(it.qty)}</td><td class="r">${money(it.price)}</td><td class="r">${money((+it.qty || 0) * (+it.price || 0))}</td></tr>`).join('')}
-        <tr><td colspan="4" class="r">Subtotal</td><td class="r">${money(c.sub)}</td></tr>
-        ${c.disc ? `<tr><td colspan="4" class="r">Less: discount</td><td class="r">(${money(c.disc)})</td></tr>` : ''}
-        ${q.vat === 'add' ? `<tr><td colspan="4" class="r">Add: 12% VAT</td><td class="r">${money(c.vat)}</td></tr>` : ''}
-        <tr><td colspan="4" class="r"><b>TOTAL AMOUNT (PHP)</b>${q.vat === 'incl' ? '<br><span class="tiny">VAT inclusive (VAT ' + money(c.vat) + ')</span>' : ''}</td><td class="r"><b>${money(c.total)}</b></td></tr></tbody></table>
-      ${q.terms ? `<p style="margin-top:12px"><b>Notes & terms:</b><br>${esc(q.terms).replace(/\n/g, '<br>')}</p>` : ''}
-      <div class="sig"><div>Prepared by<br><b>${esc(q.by || '')}</b></div><div>Approved by<br><b>&nbsp;</b></div><div>Conforme (customer)<br><b>&nbsp;</b></div></div></div>`;
+    const c = qCalc(q), m = v => (v === '' || v == null || isNaN(+v) || +v === 0) ? '' : money(v);
+    const totalLabel = q.vat === 'none' ? 'TOTAL QUOTED PRICE (PHP) — EXCLUDING VAT' : 'TOTAL QUOTED PRICE (PHP) — VAT INCLUSIVE';
+    const showSub = c.disc || q.vat === 'add';
+    const who = [q.attn ? '<b>Attn:</b> ' + esc(q.attn) : '', q.phone ? '<b>Tel:</b> ' + esc(q.phone) : '', q.email ? '<b>Email:</b> ' + esc(q.email) : ''].filter(Boolean).join(' &nbsp; ');
+    return `<div class="doc qf">
+      <div class="qf-head"><div class="qf-logo"><img src="lg-logo.png" alt="LG"><div>Authorized Dealer &amp; Service Center</div></div>
+        <div class="qf-co"><div class="qf-name">Brizair Corp.</div>
+          <div>Bldg. 7256 Unit A-2 CM Recto Highway, Civil Aviation Complex, Clark Freeport Zone, Pamp.</div>
+          <div>Email Add: brizair.corp@gmail.com &nbsp;·&nbsp; www.facebook.com/brizair.corp</div>
+          <div>Tel No: (045) 499-8061 / (Globe) 0927-584-4545 / (Smart) 0928-343-4923</div></div></div>
+      <table class="noline qf-to">
+        <tr><td><b>Customer / Company Name:</b> ${esc(q.customer)}${q.company && q.company !== q.customer ? ' / ' + esc(q.company) : ''}</td><td class="qf-r"><b>Date:</b> ${esc(fmtMDY(q.date))}</td></tr>
+        <tr><td><b>Project Site:</b> ${esc(q.project || '')}</td><td class="qf-r"><b>Valid until:</b> ${q.validUntil ? esc(fmtMDY(q.validUntil)) : q.valid ? esc(q.valid) : ''}</td></tr>
+        <tr><td><b>Address:</b> ${esc(q.address || '')}${who ? '<br>' + who : ''}</td><td class="qf-r"><b>Quotation No.:</b> ${esc(q.no || '(draft)')}</td></tr></table>
+      <div class="qf-title">QUOTATION</div>
+      <p class="qf-intro">We are pleased to present our quotation for your review and approval</p>
+      <table class="qf-items"><thead><tr><th>Model</th><th>Description</th><th class="c">Qty.</th><th class="c">Unit</th><th class="r">SRP</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead>
+      <tbody>${q.items.map(it => `<tr><td>${esc(it.model || '')}</td><td>${esc(it.desc || '')}</td><td class="c">${esc(it.qty)}</td><td class="c">${esc(it.unit || '')}</td>
+          <td class="r">${m(it.srp)}</td><td class="r">${m(it.price)}</td><td class="r"><b>${money((+it.qty || 0) * (+it.price || 0))}</b></td></tr>`).join('')}
+        ${showSub ? `<tr><td colspan="6" class="r">Subtotal</td><td class="r">${money(c.sub)}</td></tr>` : ''}
+        ${c.disc ? `<tr><td colspan="6" class="r">Less: discount</td><td class="r">(${money(c.disc)})</td></tr>` : ''}
+        ${q.vat === 'add' ? `<tr><td colspan="6" class="r">Add: 12% VAT</td><td class="r">${money(c.vat)}</td></tr>` : ''}
+        <tr class="qf-total"><td colspan="6">${totalLabel}${q.vat === 'incl' ? ' <span class="tiny">(VAT ' + money(c.vat) + ')</span>' : ''}</td><td class="r">${money(c.total)}</td></tr></tbody></table>
+      ${q.terms ? `<p class="qf-notes"><b>Notes:</b><br>${esc(q.terms).replace(/\n/g, '<br>')}</p>` : ''}
+      <div class="qf-terms"><div class="qf-th">TERMS AND CONDITIONS</div>
+        ${QF_TERMS.map(([h, xs]) => `<div class="qf-sec"><b>${h}</b><ul>${xs.map(x => /^<i>/.test(x) ? `<li class="nob">${x}</li>` : `<li>${x}</li>`).join('')}</ul></div>`).join('')}</div>
+      <div class="qf-sign">
+        <div><b>PREPARED BY:</b><span class="ln"></span><b>LADIE LYN SALAMAT</b><br>Admin Officer</div>
+        <div><b>CHECKED BY:</b><span class="ln"></span><b>JHEENA CALMA</b><br>Accounting Officer</div>
+        <div><b>APPROVED BY:</b><span class="ln"></span><b>MR. EUICHAN KIM</b><br>Corporate Treasurer</div>
+        <div><b>CUSTOMER ACCEPTANCE</b><span class="ln"></span><b>DATE &amp; SIGNATURE OVER PRINTED NAME</b></div></div></div>`;
   }
 
   function invoiceDoc(q) {
@@ -1206,8 +1293,55 @@
         <dl class="kv">${kind === 'unit' ? `<dt>Type</dt><dd>${esc(x.type)} ${esc(x.hp)}</dd><dt>SRP</dt><dd>${peso(x.srp)}</dd><dt>Cost</dt><dd>${peso(x.cost)}</dd>${x.supplier ? `<dt>Supplier</dt><dd>${esc(x.supplier)}</dd>` : ''}`
           : `<dt>Part no.</dt><dd>${esc(x.pn || '—')}</dd><dt>Group</dt><dd>${esc(x.group)}</dd><dt>Customer price</dt><dd>${peso(x.price)}</dd><dt>LG cost</dt><dd>${peso(x.cost)}</dd>`}
           ${x.notes ? `<dt>Notes</dt><dd>${esc(x.notes)}</dd>` : ''}</dl>
+        ${kind === 'unit' && resOpen().some(r => r.item === x.item) ? `<h2 style="margin-bottom:4px">Reserved for projects</h2><div class="list" style="margin-bottom:12px">${resOpen().filter(r => r.item === x.item).map(r => `<button class="item" data-act="res" data-r="${r.r}"><span class="pill p-PARTIAL">${r.qty}</span><span class="grow"><div class="t small clip">${esc(r.party)}</div><div class="s clip">${esc([r.ref, fmtD(r.date, {year: 'numeric'})].filter(Boolean).join(' · '))}</div></span></button>`).join('')}</div>` : ''}
         <h2 style="margin-bottom:4px">Recent moves</h2><div class="list">${moves.map(l => `<div class="item"><span class="pill ${l.dir === 'IN' ? 'p-Done' : 'p-UNPAID'}">${l.dir} ${l.qty}</span><span class="grow"><div class="s">${esc([fmtD(l.date, {year: 'numeric'}), l.party, l.ref, l.by].filter(Boolean).join(' · '))}</div></span></div>`).join('') || '<div class="empty">No moves recorded</div>'}</div>`,
-        `<button class="btn green" data-act="move" data-kind="${kind}" data-item="${esc(x.item)}" data-dir="IN">${ic('inbox')} IN</button><button class="btn red" data-act="move" data-kind="${kind}" data-item="${esc(x.item)}" data-dir="OUT">${ic('outbox')} OUT</button>`);
+        `${kind === 'unit' ? `<button class="btn" data-act="resNew" data-item="${esc(x.item)}">${ic('plus')} Reserve</button>` : ''}<button class="btn green" data-act="move" data-kind="${kind}" data-item="${esc(x.item)}" data-dir="IN">${ic('inbox')} IN</button><button class="btn red" data-act="move" data-kind="${kind}" data-item="${esc(x.item)}" data-dir="OUT">${ic('outbox')} OUT</button>`);
+    },
+    resNew: el => {
+      S.rv = {item: el.dataset.item || ''};
+      const u = (D().units || []).find(x => x.item === S.rv.item);
+      openSheet('Reserve for a project', `<form id="fres">
+        <div class="f pick"><label>Model *</label><input id="r_item" autocomplete="off" placeholder="Type to search…" value="${esc(S.rv.item)}"><div class="pick-list hidden" id="r_pick"></div><div class="hint" id="r_now">${u ? 'In stock now: ' + u.now + ' · already reserved: ' + (resByItem().get(u.item) || 0) : ''}</div></div>
+        <div class="f2">${field('Qty *', '<input name="qty" inputmode="numeric" value="1" required>')}${field('Date', `<input type="date" name="date" value="${today()}">`)}</div>
+        ${field('Customer / project *', '<input name="party" list="dlcust4" autocomplete="off" placeholder="e.g. Sinyang Mugs Corp. / Dia Town 2nd Flr">')}${dl('dlcust4', custNames())}
+        ${field('PO / ref', '<input name="ref" placeholder="Customer PO or quotation no.">')}
+        ${field('Notes', '<input name="notes">')}
+        <p class="hint">The unit stays in stock until it is installed. When it is installed, open it here and tap “Installed” — it goes OUT of stock automatically.</p></form>`,
+        `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveRes">Save</button>`, v => {
+          picker($('#r_item', v), $('#r_pick', v), q => {
+            q = lc(q);
+            return (D().units || []).filter(x => !q || lc([x.item, x.type, x.hp].join(' ')).includes(q)).slice(0, 40)
+              .map(x => ({t: x.item, s: [x.type, x.hp, 'stock ' + x.now, (resByItem().get(x.item) || 0) ? 'reserved ' + resByItem().get(x.item) : '', x.cost ? 'cost ' + peso(x.cost, 0) : ''].filter(Boolean).join(' · '), v: x}));
+          }, o => { $('#r_item', v).value = o.t; S.rv.item = o.t; $('#r_now', v).textContent = 'In stock now: ' + o.v.now + ' · already reserved: ' + (resByItem().get(o.t) || 0); });
+          $('#r_item', v).addEventListener('input', () => { S.rv.item = ''; });
+        });
+    },
+    saveRes: async el => {
+      const f = formData('#fres'), item = S.rv.item || $('#r_item').value.trim();
+      if (!(D().units || []).some(x => x.item === item)) return toast('Choose the model from the list', true);
+      if (!(+f.qty > 0)) return toast('Qty must be 1 or more', true);
+      if (!f.party) return toast('Write the customer / project', true);
+      el.disabled = true;
+      try { await save('resAdd', {res: Object.assign(f, {item})}, `Reserved ${f.qty} × ${item} ✓`); } catch (e) { el.disabled = false; }
+    },
+    res: el => {
+      const x = (D().unitRes || []).find(r => r.r === +el.dataset.r); if (!x) return;
+      const u = (D().units || []).find(i => i.item === x.item) || {};
+      S.rs = x;
+      openSheet('Reserved unit', `<dl class="kv"><dt>Model</dt><dd>${esc(x.item)}</dd><dt>Qty</dt><dd>${x.qty}</dd><dt>Customer / project</dt><dd>${esc(x.party)}</dd>
+          ${x.ref ? `<dt>PO / ref</dt><dd>${esc(x.ref)}</dd>` : ''}<dt>Reserved on</dt><dd>${esc(fmtD(x.date, {year: 'numeric'}))}${x.by ? ' · ' + esc(x.by) : ''}</dd>
+          ${x.notes ? `<dt>Notes</dt><dd>${esc(x.notes)}</dd>` : ''}<dt>In stock now</dt><dd>${u.now ?? '?'}${u.cost ? ' · cost ' + peso(u.cost) + ' each' : ''}</dd></dl>
+        <div class="f2">${field('How many?', `<input id="rs_qty" inputmode="numeric" value="${x.qty}">`, 'Less than all = the rest stays reserved')}${field('Date', `<input type="date" id="rs_date" value="${today()}">`)}</div>
+        ${field('Notes', '<input id="rs_notes" placeholder="e.g. technician, invoice no.">')}`,
+        `<button class="btn" data-act="resSet" data-st="Cancelled">✖ Cancel reservation</button><button class="btn primary" data-act="resSet" data-st="Installed">${ic('check')} Installed (stock OUT)</button>`);
+    },
+    resSet: async el => {
+      const x = S.rs; if (!x) return;
+      const st = el.dataset.st, qty = +$('#rs_qty').value;
+      if (!(qty > 0 && qty <= x.qty)) return toast('How many: 1 to ' + x.qty, true);
+      if (st === 'Cancelled' && !confirmBox(`Cancel the reservation of ${qty} × ${x.item}? (stock does not change)`)) return;
+      el.disabled = true;
+      try { await save('resSet', {r: x.r, id: x.id, status: st, qty, date: $('#rs_date').value, notes: $('#rs_notes').value.trim()}, st === 'Installed' ? `Installed ✓ ${qty} × ${x.item} went OUT of stock` : 'Reservation cancelled ✓'); } catch (e) { el.disabled = false; }
     },
     move: el => openMove(el.dataset.kind || 'unit', el.dataset.item, el.dataset.dir),
     moveKind: el => { closeSheet(); openMove(el.dataset.kind); },
@@ -1289,7 +1423,7 @@
       try { await save('addInstall', {inst: f}, 'Installation saved ✓'); } catch (e) { el.disabled = false; }
     },
     quoteFor: el => go('quote/new:' + encodeURIComponent(el.dataset.cust)),
-    qAddLine: el => { S.qd.items.push({desc: el.dataset.d, qty: 1, price: ''}); qRender(); const ins = $$('.qline input[data-f=desc]'); const last = ins[ins.length - 1]; if (last && !el.dataset.d) last.focus(); },
+    qAddLine: el => { S.qd.items.push({model: '', desc: el.dataset.d, qty: 1, unit: el.dataset.u || '', srp: '', price: ''}); qRender(); const ins = $$('.qline input[data-f=desc]'); const last = ins[ins.length - 1]; if (last && !el.dataset.d) last.focus(); },
     qDel: el => { S.qd.items.splice(+el.dataset.i, 1); qRender(); },
     qSave: async el => {
       const q = qRead();

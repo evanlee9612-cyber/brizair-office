@@ -34,6 +34,15 @@
     'Aircon units': '에어컨 유닛', 'Parts': '부품', 'LG report': 'LG 보고', 'In / Out': '입출고', 'All': '전체', 'In stock': '재고 있음',
     'Zero stock': '재고 0', 'Nothing found': '찾는 게 없어요', 'In stock now': '지금 재고', 'Type': '종류', 'SRP': '손님가', 'Cost': '원가',
     'Aircons on hand': '에어컨 재고', 'Parts on hand': '부품 재고', 'Front panels': '패널', 'Value at cost': '원가 합계', 'Value at SRP': '손님가 합계',
+    'After current projects': '진행 중 프로젝트 끝난 뒤', 'Reserve for a project': '프로젝트용 예약', 'Reserve': '예약',
+    'Reserved = sold to a project but not installed yet (still in our stock). Values at cost.': '예약 = 프로젝트에 팔았지만 아직 설치 안 한 것 (아직 우리 창고에 있음). 금액은 원가 기준이에요.',
+    'On hand now': '지금 창고 재고', 'Reserved (not installed)': '예약 (설치 전)', 'Free after projects': '프로젝트 끝난 뒤 남는 재고',
+    'Reserved, not in stock': '예약했는데 재고 없음', 'waiting for delivery': '입고 기다리는 중', 'No reserved units': '예약된 유닛 없음',
+    'Reserved for projects': '프로젝트 예약', 'Reserved unit': '예약된 유닛', 'Reserved on': '예약한 날', 'Model': '모델', 'Customer / project': '손님 / 현장',
+    'PO / ref': 'PO / 참고 번호', 'How many?': '몇 개?', 'Less than all = the rest stays reserved': '일부만 하면 나머지는 예약으로 남아요',
+    '✖ Cancel reservation': '✖ 예약 취소', 'Installed (stock OUT)': '설치함 (재고 OUT)', 'Write the customer / project': '손님 / 현장을 쓰세요',
+    'Reservation cancelled ✓': '예약 취소 ✓', 'Customer PO or quotation no.': '손님 PO 또는 견적 번호',
+    'The unit stays in stock until it is installed. When it is installed, open it here and tap “Installed” — it goes OUT of stock automatically.': '설치 전까지는 재고에 그대로 있어요. 설치하면 여기서 열고 “설치함”을 누르면 재고에서 자동으로 OUT 돼요.',
     'Value at LG cost': 'LG 원가 합계', 'Value at customer price': '손님가 합계', 'Values include front panels.': '금액에는 패널도 들어 있어요.',
     'Supplier': '공급처', 'Part no.': '부품번호', 'Group': '분류', 'Customer price': '손님가', 'LG cost': 'LG 원가', 'Recent moves': '최근 입출고',
     'No moves recorded': '입출고 기록 없음', 'What?': '무엇?', 'Aircon unit': '에어컨 유닛', 'Part': '부품', 'Model *': '모델 *', 'Part *': '부품 *',
@@ -60,6 +69,11 @@
     'New quotation': '새 견적서', 'Quotations': '견적서 목록', 'No quotations yet': '견적서 없음', 'Print a form': '양식 인쇄',
     'Service report (blank)': '서비스 리포트 (빈 양식)', 'Start-up report (blank)': '시운전 기록표 (빈 양식)', 'Quotes': '견적서',
     'Customer name *': '손님 이름 *', 'Company': '회사', 'Contact person': '담당자', 'Address': '주소', 'Phone': '전화', 'Email': '이메일',
+    'Project site': '현장 (Project site)', 'Valid until': '유효 기한', 'Unit': '단위', 'SRP ₱': '손님가(SRP) ₱', 'Excluding VAT (BRIZAIR form)': 'VAT 별도 (BRIZAIR 양식)',
+    '+ 10ft Basic Installation': '+ 기본 설치 10ft', '+ Indoor & Outdoor Bracket': '+ 실내·실외 브래킷', '+ Dismantle Old ACU': '+ 기존 에어컨 철거', '+ Excess Pipes': '+ 추가 배관(m)',
+    'Extra notes (printed above the terms)': '추가 메모 (조건 위에 인쇄)', 'Margin on stock items (not printed)': '재고 품목 마진 (인쇄 안 됨)',
+    'BRIZAIR terms and conditions (delivery, warranty, exclusions, payment 50/30/20) are always printed.': 'BRIZAIR 조건(납기·보증·제외 사항·결제 50/30/20)은 항상 인쇄돼요.',
+    'No items yet — add from stock or tap “+ 10ft Basic Installation”.': '아직 품목 없음 — 재고에서 넣거나 “+ 기본 설치 10ft”를 누르세요.',
     'Project / subject': '건명', 'Valid for': '유효 기간', 'Items': '품목', '+ Installation': '+ 설치비', '+ Materials': '+ 자재', '+ Other line': '+ 기타 줄',
     'Discount (₱)': '할인 (₱)', 'VAT': '부가세', 'Prices include 12% VAT': '부가세 12% 포함 가격', 'Add 12% VAT': '부가세 12% 별도', 'No VAT line': '부가세 줄 없음',
     'Subtotal': '소계', 'Discount': '할인', 'Total': '합계', 'VAT included': '포함된 부가세', 'VAT 12%': '부가세 12%',
@@ -173,7 +187,10 @@
     [/^Good morning, (.+)$/, '좋은 아침이에요, $1님'], [/^Good afternoon, (.+)$/, '안녕하세요, $1님'], [/^Good evening, (.+)$/, '수고 많으셨어요, $1님'],
     [/^(\d+) jobs?$/, '$1건'], [/^(\d+) units?$/, '$1대'], [/^(\d+) customers?$/, '손님 $1명'], [/^Units \((\d+)\)$/, '유닛 ($1)'],
     [/^Uploaded \((\d+)\)$/, '올린 자료 ($1)'], [/^All (\d+)$/, '전체 $1'], [/^Tomorrow · (.+)$/, '내일 · $1'], [/^Tomorrow$/, '내일'],
-    [/^In stock now: (.+)$/, '지금 재고: $1'], [/^Total on hand: ?$/, '전체 재고: '], [/^(\d+) pcs have no price in the sheet \(not counted\)$/, '$1개는 시트에 가격이 없어 합계에서 빠졌어요'], [/^\+(\d+) more$/, '+$1건 더'],
+    [/^In stock now: (\S+) · already reserved: (\d+)$/, '지금 재고: $1 · 이미 예약: $2'], [/^In stock now: (.+)$/, '지금 재고: $1'],
+    [/^Reserved (\d+) × (.+) ✓$/, '예약 ✓ $1 × $2'], [/^Installed ✓ (\d+) × (.+) went OUT of stock$/, '설치 ✓ $1 × $2 재고에서 나갔어요'],
+    [/^How many: 1 to (\d+)$/, '수량: 1~$1'], [/^Cancel the reservation of (\d+) × (.+)\? \(stock does not change\)$/, '$1 × $2 예약을 취소할까요? (재고는 그대로예요)'],
+    [/^(\d+) not in stock$/, '$1개 재고 없음'], [/^Old “valid for”: (.+)$/, '예전 유효 기간: $1'], [/^(\d+) \+ (\d+) panels?$/, '$1 + 패널 $2'], [/^Total on hand: ?$/, '전체 재고: '], [/^(\d+) pcs have no price in the sheet \(not counted\)$/, '$1개는 시트에 가격이 없어 합계에서 빠졌어요'], [/^\+(\d+) more$/, '+$1건 더'],
     [/^Search (.+)…$/, '검색…'], [/^Logged in as ?$/, '로그인: '], [/^Saved ✓ (.+)$/, '저장 ✓ $1'], [/^Status: (.+)$/, '상태: $1'],
     [/^Could not load: (.+)$/, '불러오기 실패: $1'], [/^Choose the (model|part) from the list$/, '목록에서 골라 주세요'],
     [/^Stock is only (-?\d+)\. Record OUT (\d+) anyway\?$/, '재고가 $1개뿐이에요. 그래도 OUT $2개를 기록할까요?'],
@@ -185,7 +202,7 @@
     [/^GPT reached its ChatGPT usage limit\. Please ask again after (.+)\.$/, 'GPT 사용 한도에 걸렸어요. $1 이후에 다시 물어봐 주세요.'], [/^GPT reached its ChatGPT usage limit\. Please ask again later\.$/, 'GPT 사용 한도에 걸렸어요. 잠시 뒤에 다시 물어봐 주세요.'], [/^Waiting — Sir Kim's PC is offline\. It will answer when the PC is on\.$/, '대기 중 — 대표님 컴퓨터가 꺼져 있어요. 켜지면 답해요.'], [/^No jobs\. ?$/, '일정 없음. '], [/^\+ Add a job on this day$/, '+ 이날 일정 추가']
   ];
   const FRAG = [[/\bInstalled (?=[A-Z—])/g, '설치 '], [/ · Last cleaning /g, ' · 마지막 청소 '], [/ · Next$/g, ' · 다음'], [/^Next$/g, '다음'],
-    [/\bIndoor SN /g, '실내기 SN '], [/\bOutdoor SN /g, '실외기 SN '], [/ in stock now\b/g, ' 지금 재고'], [/\bstock (\d)/g, '재고 $1'], [/ · LG ₱/g, ' · LG 원가 ₱'], [/ · cost ₱/g, ' · 원가 ₱'], [/ — still (Scheduled|Confirmed)$/g, ' — 아직 $1'], [/ · due /g, ' · 기한 '], [/ · sent /g, ' · 보냄 '], [/^due /g, '기한 ']];
+    [/\bIndoor SN /g, '실내기 SN '], [/\bOutdoor SN /g, '실외기 SN '], [/ in stock now\b/g, ' 지금 재고'], [/\bstock (\d)/g, '재고 $1'], [/ · LG ₱/g, ' · LG 원가 ₱'], [/ · cost ₱/g, ' · 원가 ₱'], [/ · reserved (\d+)/g, ' · 예약 $1'], [/ each$/g, ' (1개당)'], [/ — still (Scheduled|Confirmed)$/g, ' — 아직 $1'], [/ · due /g, ' · 기한 '], [/ · sent /g, ' · 보냄 '], [/^due /g, '기한 ']];
 
   let lang = 'en';
   try { lang = localStorage.getItem('brz_lang') || ''; } catch (e) { lang = ''; }
