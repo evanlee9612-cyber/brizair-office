@@ -535,7 +535,7 @@
         <div class="stat"><span>Our items</span><b>${pcs}</b></div>
         <div class="stat"><span>Value at cost</span><b style="font-size:20px">${peso(cost, 0)}</b></div>
         <div class="stat"><span>Value at SRP</span><b style="font-size:20px">${peso(sell, 0)}</b></div>
-        <div class="stat"><span>Customer units here</span><b>${cust}</b></div>
+        <div class="stat"><span>Not our stock (customer / on hold)</span><b>${cust}</b></div>
       </div>
       <label class="chip ${S.otherDone ? 'on' : ''}" style="cursor:pointer;margin-bottom:12px;display:inline-flex"><input type="checkbox" data-act="otherDone" ${S.otherDone ? 'checked' : ''} style="display:none">Show done (sold / returned)</label>
       <div id="otherList">${otherListHtml()}</div>`;
@@ -545,10 +545,13 @@
     let list = all.filter(x => S.otherDone || x.status !== 'Done');
     if (q) list = list.filter(x => lc([x.cat, x.item, x.desc, x.sn, x.loc, x.cust, x.notes].join(' ')).includes(q));
     const cats = OTHER_CATS.concat(Array.from(new Set(all.map(x => x.cat).filter(c => c && !OTHER_CATS.includes(c)))));
-    return `${cats.map(c => { const xs = list.filter(x => (x.cat || 'Other materials') === c); return xs.length ? `<div class="card"><div class="card-h"><h2 class="small" style="font-size:14px;color:var(--ink-2)">${esc(c)}</h2><span class="muted small">${xs.length}</span></div><div class="list">
+    let sep = false;
+    return `${cats.map(c => { const xs = list.filter(x => (x.cat || 'Other materials') === c); if (!xs.length) return ''; const no = NOT_OURS.includes(c);
+      const head = no && !sep ? (sep = true, `<h2 class="small" style="font-size:14px;margin:18px 0 4px">Not our stock — kept here, not counted</h2><p class="muted small" style="margin:0 0 8px">Belongs to customers or the project on hold. Not in our items or value. Do not sell.</p>`) : '';
+      return `${head}<div class="card"${no ? ' style="opacity:.85"' : ''}><div class="card-h"><h2 class="small" style="font-size:14px;color:var(--ink-2)">${esc(c)}${no ? ' <span class="pill p-PARTIAL">Not our stock</span>' : ''}</h2><span class="muted small">${xs.length}</span></div><div class="list">
         ${xs.map(x => `<button class="item" data-act="otherEdit" data-r="${x.r}"><span class="grow"><div class="t clip">${esc(x.item)}${x.status && x.status !== 'In stock' ? ` <span class="pill ${x.status === 'Done' ? 'p-Done' : 'p-PARTIAL'}">${esc(x.status)}</span>` : ''}</div>
           <div class="s clip">${esc([x.desc, x.cust, x.sn ? 'SN ' + x.sn : '', x.loc, x.cost ? 'cost ' + peso(x.cost, 0) : '', x.srp ? 'SRP ' + peso(x.srp, 0) : '', x.notes].filter(Boolean).join(' · '))}</div></span>
-          <span class="qty ${+x.qty > 0 ? 'has' : 'zero'}">${x.qty ?? ''}</span></button>`).join('')}</div></div>` : ''; }).join('') || '<div class="card"><div class="empty">Nothing found</div></div>'}`;
+          <span class="qty ${+x.qty > 0 ? 'has' : 'zero'}">${x.qty ?? ''}</span></button>`).join('')}</div></div>`; }).join('') || '<div class="card"><div class="empty">Nothing found</div></div>'}`;
   }
   function supForm(x) {
     x = x || {};
