@@ -1,4 +1,4 @@
-# 매일 점검: BRIZAIR 사이트를 Ladie가 편하게 쓰도록 다듬기 (2026-11-16 Evan 지시)
+# 매일 점검: BRIZAIR 사이트를 Ladie·Jheena가 편하게 쓰도록 다듬기 (2026-11-16 Evan 지시)
 
 Evan의 말: "레이디가 쓰게 편하게 최적화를 계속 해주는게 좋을거같아." 범위 안의 사이트 수정과 배포는 묻지 말고 진행한다.
 
@@ -12,12 +12,13 @@ Evan의 말: "레이디가 쓰게 편하게 최적화를 계속 해주는게 좋
    - 메모에 상태를 글로 적는 것 (예: "PENDING")
    - GPT에게 "어떻게 해?"라고 물은 것 = 버튼이나 기능이 없거나 찾기 어렵다는 뜻
    - 안 쓰는 기능 (재고 입출고, 입금 기록 등)
+   - Jheena: 돈 화면(입금 받음·갚을 돈 Paid·현금·은행 잔액 입력·AR report)을 쓰는지. 엑셀 파일을 또 올리면 사이트에 없는 항목이 뭔지 비교해서 빠진 기능 찾기
 3. 작고 확실한 개선은 바로 한다
    - 사이트는 `web/`만 고친다. 바꾼 뒤 `node`로 문법을 검사하고, 시범판(`?demo`, PIN 222222)을 headless Chrome으로 시험한다. 방법은 `/tmp/briz_tools/cdp_*.mjs`를 참고한다(없으면 같은 방식으로 새로 쓴다).
    - `web/index.html`의 `?v=`를 올리고 커밋한 뒤 배포한다: `git branch -f gh-pages "$(git subtree split --prefix web main)" && git push origin main gh-pages`
    - 바뀐 기능은 `app.js`의 NOTICE(id를 새 날짜로, items 최대 4개)와 `i18n.js` 한국어에 반영해 팝업으로 알린다.
    - 직원이 실제로 쓰는 데이터(시트)를 고칠 때는 먼저 Drive에 백업 사본을 만든다.
-4. 서버(Code.gs)를 고쳐야 하는 일은 하지 않는다. 메모해 두고 Evan 보고에 "서버 필요"로 적는다. 배포를 Evan 계정 브라우저에서 해야 하기 때문이다.
+4. 서버(Code.gs)를 고쳐야 하는 일은 모아 두고. 메모해 두고 Evan 보고에 "서버 필요"로 적는다. 배포를 Evan 계정 브라우저에서 해야 하기 때문이다.
 5. 보고: 고친 것이 있거나 Evan이 결정할 일이 있을 때만 보낸다. 3줄 이내로 쓰고 `python3 -I /Users/evanlee/claude-test/clark-travel/tools/inbox/send_evan.py 파일`로 보낸다. 별일 없으면 보내지 않는다.
 6. `logs/daily_check.log`에 한 줄을 추가한다: `YYYY-MM-DD HH:MM | 본 기록 n건 | 한 일`
 
