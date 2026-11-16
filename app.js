@@ -1220,12 +1220,40 @@
         <label class="btn" style="cursor:pointer">${ic('camera')} Add photos<input type="file" accept="image/*" multiple hidden data-photo="${j.r}"></label>
         ${j.photos ? `<a class="btn" href="${esc(j.photos)}" target="_blank" rel="noopener">${ic('sheet')} Open photos</a>` : ''}</div>
         <div class="hint" id="photoMsg">Photos are saved in Google Drive, one folder per job.</div></div>
-      <div class="btns"><button class="btn" data-act="jobEdit" data-r="${j.r}">${ic('edit')} Edit</button>
+      <div class="btns">${j.status !== 'Done' ? `<button class="btn primary" data-act="jobDoneOpen" data-r="${j.r}">✅ Done + work done</button>` : ''}
+        ${j.status !== 'Done' && j.status !== 'Cancelled' ? `<button class="btn" data-act="jobMoveOpen" data-r="${j.r}">📅 Move to another day</button>` : ''}
+        <button class="btn" data-act="jobEdit" data-r="${j.r}">${ic('edit')} Edit</button>
         ${j.location ? `<a class="btn" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.location)}" target="_blank" rel="noopener">${ic('pin')} Map</a>` : ''}
         <button class="btn" data-act="quoteFor" data-cust="${esc(j.customer)}">${ic('doc')} Quotation</button>
         <button class="btn" data-act="printForm" data-f="service" data-r="${j.r}">${ic('print')} Service report</button>
         <button class="btn" data-act="printForm" data-f="startup" data-r="${j.r}">${ic('print')} Start-up report</button>
         <button class="btn" data-go="cust/${encodeURIComponent(j.customer)}">${ic('users')} Customer</button></div>`);
+  }
+
+  const addNote = (old, add) => [String(old || '').trim(), add].filter(Boolean).join(' / ');
+  /** Done → write what was actually done (saved in Notes as "Work Done: …") */
+  function jobDoneSheet(j) {
+    S.doneJob = j;
+    openSheet('Job done', `<form id="fdone">
+      <p class="small" style="margin:0 0 10px">${esc(j.customer)} · ${esc(fmtLong(j.date))}${j.job ? ' · ' + esc(j.job) : ''}</p>
+      ${field('Work done', `<textarea name="work" placeholder="e.g. General cleaning 3 units ceiling suspended · changed capacitor"></textarea>`, 'Saved in Notes as “Work Done: …”. You can leave it empty.')}
+    </form>`, `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveJobDone">✅ Save as Done</button>`);
+  }
+  /** Moved → old job becomes "Moved", a new job is made on the new date (e.g. backjob → resched for cleaning) */
+  function jobMoveSheet(j) {
+    S.moveJob = j;
+    const jobs = D().jobs || ['Install', 'Service (AS)', 'Cleaning', 'Survey', 'Delivery', 'Pull-out', 'Meeting', 'Other'];
+    openSheet('Move to another day', `<form id="fmovejob">
+      <p class="small" style="margin:0 0 10px">${esc(j.customer)} · ${esc(fmtLong(j.date))}${j.time ? ' · ' + esc(j.time) : ''}</p>
+      <div class="f2">${field('New date *', `<input type="date" name="date" required value="${today()}">`)}
+        ${field('Time', `<input name="time" placeholder="e.g. 9:00 AM" list="dltime2" value="${esc(j.time || '')}">`)}</div>
+      ${dl('dltime2', ['8:00 AM', '8:30 AM', '9:00 AM', '10:00 AM', '11:00 AM', '1:00 PM', '1:30 PM', '2:00 PM', '3:00 PM', '4:00 PM'])}
+      ${field('Job on the new day', choice('job', jobs, j.job || 'Cleaning'))}
+      ${field('Why moved', `<input name="why" list="dlwhy" placeholder="e.g. Backjob, customer not available">`)}${dl('dlwhy', ['Backjob', 'Customer not available', 'Rain', 'No parts yet', 'Technician not available'])}
+      ${field('Technician', `<input name="tech" list="dltech2" value="${esc(j.tech || '')}">`)}${dl('dltech2', techs())}
+      ${field('Notes for the new job', `<textarea name="notes"></textarea>`)}
+      <p class="hint">The old job is marked “Moved” and a new job is added on the new date (same customer, location and units).</p>
+    </form>`, `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveJobMove">Move</button>`);
   }
 
   function arSheet(r) {
@@ -1436,7 +1464,30 @@
     job: el => { const j = (D().schedule || []).find(x => x.r === +el.dataset.r); if (j) jobSheet(j); },
     jobStatus: async el => {
       const j = (D().schedule || []).find(x => x.r === +el.dataset.r); if (!j || el.value === j.status) return;
+      if (el.value === 'Done') return jobDoneSheet(j);
+      if (el.value === 'Moved') return jobMoveSheet(j);
       try { await save('updateJob', {r: j.r, id: j.id, customer: j.customer, set: {status: el.value}}, j.customer + ' → ' + el.value); } catch (e) { }
+    },
+    jobDoneOpen: el => { const j = (D().schedule || []).find(x => x.r === +el.dataset.r); if (j) jobDoneSheet(j); },
+    jobMoveOpen: el => { const j = (D().schedule || []).find(x => x.r === +el.dataset.r); if (j) jobMoveSheet(j); },
+    saveJobDone: async el => {
+      const j = S.doneJob, w = formData('#fdone').work || '';
+      const set = {status: 'Done'};
+      if (w) set.notes = addNote(j.notes, 'Work Done: ' + w);
+      el.disabled = true;
+      try { await save('updateJob', {r: j.r, id: j.id, customer: j.customer, set}, j.customer + ' → Done ✓'); } catch (e) { el.disabled = false; }
+    },
+    saveJobMove: async el => {
+      const j = S.moveJob, f = formData('#fmovejob');
+      if (!f.date) return toast('Choose the new date', true);
+      const why = f.why ? ' (' + f.why + ')' : '';
+      el.disabled = true;
+      try {
+        await call('updateJob', {r: j.r, id: j.id, customer: j.customer, set: {status: 'Moved', notes: addNote(j.notes, 'Moved to ' + f.date + (f.time ? ' ' + f.time : '') + why)}});
+        await save('addJob', {job: {date: f.date, time: f.time || '', job: f.job || j.job, customer: j.customer, location: j.location || '', units: j.units || '',
+          tech: f.tech || '', notes: addNote(f.notes, 'Moved from ' + j.date + why)}}, 'Moved to ' + f.date + ' ✓');
+        S.calSel = f.date; S.calYM = f.date.slice(0, 7);
+      } catch (e) { el.disabled = false; refresh(true); }
     },
     jobEdit: el => {
       const j = (D().schedule || []).find(x => x.r === +el.dataset.r); if (!j) return;
