@@ -1896,11 +1896,26 @@
   window.addEventListener('hashchange', render);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.t && Date.now() - (S._lastRefresh || 0) > 120000) { S._lastRefresh = Date.now(); refresh(true); } });
 
+  /** one-time "What's new" popup — change NOTICE.id to show a new one; each phone shows it until "Got it" */
+  const NOTICE = {id: '2026-11-16', title: 'What’s new (Nov 16)', items: [
+    ['💵 Receivables (Jheena’s file, Nov 13)', 'Updated in Money. New: PHIEXCEL P.O 2026-000741 (balance ₱5,247). 11 old Philexcel 10% retention lines (₱223,813.78) are not in your file — were they paid? Please tell us. They stay in the list (marked “CHECK”) until confirmed.'],
+    ['🧽 Cleaning list (Ladie’s AS Summary Report)', 'New tab CLEANING DUE in the Google Sheet: 213 customers with last cleaning and next cleaning (6 months). 84 are overdue, 2 are due within 30 days. Filter by Status. Home → “Cleaning due soon” also uses it now.'],
+    ['✅ Schedule: Done + work done', 'When you tap Done, write what was done. It is saved in Notes as “Work Done: …”.'],
+    ['📅 Move to another day', 'For backjobs or resched (e.g. backjob → cleaning): open the job → “Move to another day”. The old job becomes Moved and the new job is added on the new date.']]};
+  function showNotice() {
+    if (LS.get('brz_notice', '') === NOTICE.id || $('.veil')) return;
+    const url = (D().sheetUrl || 'https://docs.google.com/spreadsheets/d/1jahKP1N3VVmiBqSXlr3xbmJxORVAWFVQNtxMLyqbCKE/edit') + '#gid=118798267';
+    openSheet(NOTICE.title, `<div class="list">${NOTICE.items.map(x => `<div class="item"><span class="grow"><div class="t">${x[0]}</div><div class="s" style="white-space:normal">${x[1]}</div></span></div>`).join('')}</div>`,
+      `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">${ic('sheet')} Open cleaning list</a><button class="btn primary" data-act="noticeOk">Got it</button>`);
+  }
+  ACT.noticeOk = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); };
+
   function start() {
     shell();
     render();
     S._lastRefresh = Date.now();
     refresh(!!S.D);
+    setTimeout(showNotice, LS.get('brz_seen_help', false) ? 900 : 4000);
   }
   if (S.t) start(); else renderLogin();
   window.BRZ = {S, render, refresh};
