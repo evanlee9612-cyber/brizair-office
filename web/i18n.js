@@ -28,6 +28,11 @@
     'Scheduled': '예정', 'Confirmed': '확정', 'Done': '완료', 'Moved': '변경', 'Cancelled': '취소됨',
     '✅ Done': '✅ 완료', '✖ Cancelled': '✖ 취소', 'Colors:': '색:', 'Change status': '상태 바꾸기', 'When': '언제', 'Units': '유닛',
     'Technician': '기사', 'Notes': '메모', 'Added by': '작성', 'Service report': '서비스 리포트', 'Start-up report': '시운전 기록표',
+    'Job done': '작업 완료', 'Work done': '한 작업', '✅ Save as Done': '✅ 완료로 저장', '✅ Done + work done': '✅ 완료 + 한 작업 적기',
+    'Saved in Notes as “Work Done: …”. You can leave it empty.': '메모에 “Work Done: …”으로 저장돼요. 비워 둬도 돼요.',
+    'Move to another day': '다른 날로 옮기기', '📅 Move to another day': '📅 다른 날로 옮기기', 'New date *': '새 날짜 *', 'Job on the new day': '새 날 작업',
+    'Why moved': '옮긴 이유', 'Notes for the new job': '새 일정 메모', 'Move': '옮기기', 'Choose the new date': '새 날짜를 고르세요',
+    'The old job is marked “Moved” and a new job is added on the new date (same customer, location and units).': '원래 일정은 “변경”으로 바뀌고, 새 날짜에 같은 손님·장소·유닛으로 새 일정이 생겨요.',
     'Customer': '손님', 'Edit job': '일정 수정', 'Save job': '일정 저장', 'Date *': '날짜 *', 'Time': '시간', 'Job *': '작업 *',
     'Customer *': '손님 *', 'Location': '장소', 'Units / model': '유닛 / 모델',
     // stock
