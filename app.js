@@ -1231,13 +1231,41 @@
   }
 
   const addNote = (old, add) => [String(old || '').trim(), add].filter(Boolean).join(' / ');
-  /** Done → write what was actually done (saved in Notes as "Work Done: …") */
+  /** Done → "Complain / Work Done" like Ladie writes it; Cleaning jobs can also mark the customer's units cleaned */
+  const normName = x => lc(String(x || '')).replace(/[’'`.]/g, '').replace(/\b(restaurant|corp|corporation|inc|co|ltd|mr|ms|mrs|sir|the|and|of|philippines)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+  function guessCustomer(name) {
+    const a = normName(name).split(' ').filter(w => w.length > 1);
+    if (!a.length) return '';
+    let best = '', score = 0;
+    custGroups().forEach((g, k) => {
+      const b = normName(k + ' ' + Array.from(g.co).join(' ')).split(' ');
+      const hit = a.filter(w => b.includes(w)).length / a.length;
+      if (hit > score) { score = hit; best = k; }
+    });
+    return score >= 0.6 ? best : '';
+  }
+  function cleanUnitsHtml(cust) {
+    const g = custGroups().get(cust);
+    if (!g) return cust ? '<div class="hint">No units found for this customer.</div>' : '';
+    return `<div class="row" style="margin:4px 0 6px"><button type="button" class="btn" data-act="cuAll">Select all (${g.rows.length})</button></div>
+      <div class="list">${g.rows.map(c => `<label class="item" style="cursor:pointer"><input type="checkbox" name="cu" value="${c.r}" style="width:20px;height:20px;margin-right:10px">
+        <span class="grow"><div class="t small">${esc([c.m, c.d].filter(Boolean).join(' · '))}</div><div class="s">${esc([c.l, c.isn ? 'SN ' + c.isn : '', c.lc ? 'last cleaned ' + c.lc : ''].filter(Boolean).join(' · '))}</div></span></label>`).join('')}</div>`;
+  }
   function jobDoneSheet(j) {
     S.doneJob = j;
+    const isClean = /clean/i.test(j.job || '');
+    const guess = isClean ? guessCustomer(j.customer) : '';
     openSheet('Job done', `<form id="fdone">
       <p class="small" style="margin:0 0 10px">${esc(j.customer)} · ${esc(fmtLong(j.date))}${j.job ? ' · ' + esc(j.job) : ''}</p>
-      ${field('Work done', `<textarea name="work" placeholder="e.g. General cleaning 3 units ceiling suspended · changed capacitor"></textarea>`, 'Saved in Notes as “Work Done: …”. You can leave it empty.')}
-    </form>`, `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveJobDone">✅ Save as Done</button>`);
+      ${/complain|request/i.test(j.notes || '') ? '' : field('Complain / request', `<input name="comp" list="dlcomp" placeholder="e.g. Water leaking, Not cooling, Cleaning">`) + dl('dlcomp', ['Cleaning', 'Water Leaking', 'Not Cooling', 'Not Working', 'Noisy', 'Error code'])}
+      ${field('Work done', `<textarea name="work" placeholder="e.g. General cleaning 3 units ceiling suspended · Flush out drain"></textarea>`, 'Saved in Notes as “Complain: … / Work Done: …”. You can leave it empty.')}
+      ${isClean ? `<div class="f"><label>Units cleaned (sets the next cleaning date)</label>
+        <input id="cu_cust" list="dlcust4" autocomplete="off" value="${esc(guess)}" placeholder="Customer in the customer list">${dl('dlcust4', custNames())}
+        <div id="cu_list" style="margin-top:8px">${cleanUnitsHtml(guess)}</div></div>` : ''}
+    </form>`, `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveJobDone">✅ Save as Done</button>`, v => {
+      const inp = $('#cu_cust', v);
+      if (inp) inp.addEventListener('change', () => { $('#cu_list', v).innerHTML = cleanUnitsHtml(inp.value.trim()); });
+    });
   }
   /** Moved → old job becomes "Moved", a new job is made on the new date (e.g. backjob → resched for cleaning) */
   function jobMoveSheet(j) {
@@ -1470,12 +1498,29 @@
     },
     jobDoneOpen: el => { const j = (D().schedule || []).find(x => x.r === +el.dataset.r); if (j) jobDoneSheet(j); },
     jobMoveOpen: el => { const j = (D().schedule || []).find(x => x.r === +el.dataset.r); if (j) jobMoveSheet(j); },
+    cuAll: () => { const b = $$('#fdone input[name=cu]'), on = b.some(x => !x.checked); b.forEach(x => { x.checked = on; }); },
     saveJobDone: async el => {
-      const j = S.doneJob, w = formData('#fdone').work || '';
+      const j = S.doneJob, f = formData('#fdone');
       const set = {status: 'Done'};
-      if (w) set.notes = addNote(j.notes, 'Work Done: ' + w);
+      const add = [f.comp ? 'Complain: ' + f.comp : '', f.work ? 'Work Done: ' + f.work : ''].filter(Boolean).join(' / ');
+      if (add) set.notes = addNote(j.notes, add);
+      const ids = $$('#fdone input[name=cu]:checked').map(x => +x.value);
+      const units = (D().customers || []).filter(c => ids.includes(c.r));
       el.disabled = true;
-      try { await save('updateJob', {r: j.r, id: j.id, customer: j.customer, set}, j.customer + ' → Done ✓'); } catch (e) { el.disabled = false; }
+      if (!units.length) {
+        try { await save('updateJob', {r: j.r, id: j.id, customer: j.customer, set}, j.customer + ' → Done ✓'); } catch (e) { el.disabled = false; }
+        return;
+      }
+      toast('Saving…', false, 120000);
+      try {
+        await call('updateJob', {r: j.r, id: j.id, customer: j.customer, set});
+        let bad = 0, i = 0;
+        const work = async () => { while (i < units.length) { const c = units[i++];
+          try { await call('cleaningDone', {r: c.r, customer: c.c || '', isn: c.isn || '', date: j.date}); } catch (e) { bad++; } } };
+        await Promise.all([work(), work(), work()]);
+        closeSheet(); await refresh(true); render();
+        toast(bad ? `Done ✓ — ${units.length - bad} units cleaned, ${bad} failed (refresh and try again)` : `Done ✓ — ${units.length} units cleaned, next cleaning in 6 months`, !!bad);
+      } catch (e) { toast(e.message, true); el.disabled = false; }
     },
     saveJobMove: async el => {
       const j = S.moveJob, f = formData('#fmovejob');
@@ -1897,10 +1942,10 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.t && Date.now() - (S._lastRefresh || 0) > 120000) { S._lastRefresh = Date.now(); refresh(true); } });
 
   /** one-time "What's new" popup — change NOTICE.id to show a new one; each phone shows it until "Got it" */
-  const NOTICE = {id: '2026-11-16', title: 'What’s new (Nov 16)', items: [
+  const NOTICE = {id: '2026-11-16b', title: 'What’s new (Nov 16)', items: [
     ['💵 Receivables (Jheena’s file, Nov 13)', 'Updated in Money. New: PHIEXCEL P.O 2026-000741 (balance ₱5,247). 11 old Philexcel 10% retention lines (₱223,813.78) are not in your file — were they paid? Please tell us. They stay in the list (marked “CHECK”) until confirmed.'],
     ['🧽 Cleaning list (Ladie’s AS Summary Report)', 'New tab CLEANING DUE in the Google Sheet: 213 customers with last cleaning and next cleaning (6 months). 84 are overdue, 2 are due within 30 days. Filter by Status. Home → “Cleaning due soon” also uses it now.'],
-    ['✅ Schedule: Done + work done', 'When you tap Done, write what was done. It is saved in Notes as “Work Done: …”.'],
+    ['✅ Schedule: Done + work done', 'When you tap Done, write Complain and Work done (saved in Notes as “Complain: … / Work Done: …”). For Cleaning jobs, tick the units you cleaned — their next cleaning date is set by itself.'],
     ['📅 Move to another day', 'For backjobs or resched (e.g. backjob → cleaning): open the job → “Move to another day”. The old job becomes Moved and the new job is added on the new date.']]};
   function showNotice() {
     if (LS.get('brz_notice', '') === NOTICE.id || $('.veil')) return;
