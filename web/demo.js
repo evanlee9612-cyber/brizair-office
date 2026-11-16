@@ -63,6 +63,10 @@
         {r: 3, id: 'DEMO-X-2', cat: 'Second-hand unit', item: 'HS09IV', desc: 'Indoor + outdoor', sn: '', qty: 2, cost: null, srp: null, loc: 'Warehouse', cust: '', status: 'In stock', notes: ''},
         {r: 4, id: 'DEMO-X-3', cat: 'Customer unit (repair)', item: 'HS12IS', desc: 'Indoor + outdoor', sn: '', qty: 2, cost: null, srp: null, loc: 'Workshop', cust: 'Sunrise Bakery', status: 'For repair', notes: ''}],
       issues: [{r: 2, id: 'DEMO-I-1', date: add(-40), pn: 'EAE43285407', item: 'Capacitor 35uF', qty: 1, type: 'Missing', since: '', status: 'Open', notes: 'not found at count'}],
+      payables: [{r: 2, id: 'DEMO-Y-1', due: 'Dec 7, 2026', name: 'LG Electronics Philippines Inc.', amount: 150000, status: 'Open', notes: 'Demo'},
+        {r: 3, id: 'DEMO-Y-2', due: '', name: 'SALARY OCTOBER (demo)', amount: 50000, status: 'Open', notes: ''}],
+      cash: [{r: 2, id: 'DEMO-C-1', date: add(-3), hand: 50000, bri: 300000, good: 80000, by: 'Jheena', notes: 'Demo'}],
+      oldPayments: [],
       suppliers: [{r: 2, id: 'DEMO-V-1', name: 'LG Electronics Philippines Inc.', supplies: 'LG units and parts', contact: 'Demo contact', phone: '', email: '', addr: 'Pasig City', notes: ''}],
       prices: [{r: 2, item: 'Coppertube 1/4', knp: 2297, hisys: 1953.13, notes: ''}, {r: 3, item: 'Rubber Insulation 1/4', knp: 301, hisys: 344.86, notes: ''}],
       units, parts, unitLog, partLog, schedule: sched, receivables, payments: [], customers, quotes: [], log: [], arTotal: null, ask: [], know: [], aiOnline: true};
@@ -150,8 +154,8 @@
       log(me, b.status === 'Installed' ? 'Reserved unit installed' : 'Reservation cancelled', `${b.qty} × ${x.item} · ${x.party}`);
     } else if (a === 'recSave') {
       const L = D[b.k] = D[b.k] || [];
-      if (b.r) { const x = L.find(k => k.r === b.r && k.id === b.id) || err('Not found. Please refresh.'); Object.assign(x, b.set); ['qty', 'cost', 'srp', 'rate'].forEach(n => { if (x[n] !== undefined && x[n] !== '' && x[n] !== null) x[n] = +x[n]; }); }
-      else { const x = Object.assign({r: ++seq, id: 'DEMO-' + b.k + '-' + seq, got: 0}, b.set); ['qty', 'cost', 'srp', 'rate'].forEach(n => { if (x[n] !== undefined && x[n] !== '') x[n] = +x[n]; }); L.push(x); }
+      if (b.r) { const x = L.find(k => k.r === b.r && k.id === b.id) || err('Not found. Please refresh.'); Object.assign(x, b.set); ['qty', 'cost', 'srp', 'rate', 'amount', 'hand', 'bri', 'good'].forEach(n => { if (x[n] !== undefined && x[n] !== '' && x[n] !== null) x[n] = +x[n]; }); }
+      else { const x = Object.assign({r: ++seq, id: 'DEMO-' + b.k + '-' + seq, got: 0}, b.set); ['qty', 'cost', 'srp', 'rate', 'amount', 'hand', 'bri', 'good'].forEach(n => { if (x[n] !== undefined && x[n] !== '') x[n] = +x[n]; }); L.push(x); }
       log(me, (b.r ? 'Updated · ' : 'Added · ') + b.k, b.set.item || b.set.name || '');
     } else if (a === 'orderRecv') {
       const o = (D.orders || []).find(k => k.r === b.r && k.id === b.id) || err('Not found. Please refresh.');

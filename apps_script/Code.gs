@@ -12,7 +12,7 @@
  * AI answers: questions go to tab ASK. Sir Kim's PC (ask_relay.py + Codex/ChatGPT) picks them up with
  *   RELAY_KEY (Script Property, set once by Evan) and writes the answer back. Materials: tab KNOWLEDGE + Drive folder.
  */
-var VERSION = '1.0';
+var VERSION = '2.0';
 var SHEET_ID = '1jahKP1N3VVmiBqSXlr3xbmJxORVAWFVQNtxMLyqbCKE';
 var TZ = 'Asia/Manila';
 var SESSION_DAYS = 90;
@@ -39,7 +39,8 @@ function doPost(e) {
     var f = ACTIONS[req.a];
     if (!f) return out({ok: false, error: 'unknown action'});
     var res = f(req, me);
-    if (res && res.ok && req.withData && req.a !== 'boot') res.data = boot_(req, me, CHANGES[req.a] || SECTIONS);  // fresh numbers in the same reply
+    var ch = req.a === 'recSave' && RECS[req.k] && RECS[req.k].money ? ['money', 'log'] : CHANGES[req.a];
+    if (res && res.ok && req.withData && req.a !== 'boot') res.data = boot_(req, me, ch || SECTIONS);  // fresh numbers in the same reply
     return out(res);
   } catch (err) {
     if (!(err && err.user)) { try { log_('system', 'error', String(err && err.message || err) + ' @' + req.a); } catch (x) {} }
@@ -304,7 +305,7 @@ function boot_(req, me, parts) {
   var T, i, names = [];
   if (want.stock) names.push('UNITS', 'PARTS', 'UNIT IN-OUT', 'PART IN-OUT', RES_TAB, 'ORDERS', 'OTHER STOCK', 'PART ISSUES', 'SUPPLIERS', 'MATERIAL PRICES');
   if (want.schedule) names.push('SCHEDULE');
-  if (want.money) names.push('RECEIVABLES', 'PAYMENTS');
+  if (want.money) names.push('RECEIVABLES', 'PAYMENTS', 'OLD PAYMENTS', 'PAYABLES', 'CASH');
   if (want.customers) names.push('CUSTOMERS');
   if (req && req.slow) { _pre = null; _fast = false; } else prefetch_(names);
   out.fast = _fast;
@@ -326,7 +327,7 @@ function boot_(req, me, parts) {
     out.unitLog = moves_('UNIT IN-OUT');
     out.partLog = moves_('PART IN-OUT');
     out.unitRes = resRows_();
-    Object.keys(RECS).forEach(function (k) { out[k] = recRows_(k); });
+    Object.keys(RECS).forEach(function (k) { if (!RECS[k].money) out[k] = recRows_(k); });
     tm.stock = Date.now() - t0;
   }
   if (want.schedule) {
@@ -361,6 +362,16 @@ function boot_(req, me, parts) {
       return {r: i + 1, date: d_(r[col_(T, 'date')]), project: proj, amount: amt || 0, method: s_(r[col_(T, 'method')]),
         by: s_(r[colOpt_(T, 'received by')]), notes: s_(r[colOpt_(T, 'notes')])};
     });
+    if (_pre && _pre['OLD PAYMENTS'] || ss_().getSheetByName('OLD PAYMENTS')) {
+      T = table_('OLD PAYMENTS');
+      out.oldPayments = rows_(T, function (r, i) {
+        var proj = s_(r[col_(T, 'customer / project')]), amt = n_(r[col_(T, 'amount')]);
+        if (!proj && amt === null) return null;
+        var dv = r[col_(T, 'date')];
+        return {r: i + 1, project: proj, date: d_(dv) || s_(dv), amount: amt || 0};
+      });
+    }
+    Object.keys(RECS).forEach(function (k) { if (RECS[k].money) out[k] = recRows_(k); });
     tm.money = Date.now() - t0;
   }
   if (want.customers) {
@@ -535,6 +546,10 @@ var RECS = {
     ['qty', 'Qty (수량)', 'num'], ['type', 'Type (종류)'], ['since', 'Since (언제부터)'], ['status', 'Status (상태)'], ['notes', 'Remarks (메모)']]},
   suppliers: {tab: 'SUPPLIERS', pre: 'V', need: ['name'], cols: [['id', 'ID'], ['name', 'Name (공급처)'], ['supplies', 'Supplies (취급 품목)'], ['contact', 'Contact person (담당자)'],
     ['phone', 'Phone (전화)'], ['email', 'Email (이메일)'], ['addr', 'Address (주소)'], ['notes', 'Notes (메모)']]},
+  payables: {tab: 'PAYABLES', pre: 'Y', money: true, need: ['name', 'amount'], cols: [['id', 'ID'], ['due', 'Due (기한)'], ['name', 'Pay to (거래처)'],
+    ['amount', 'Amount (금액)', 'num'], ['status', 'Status (상태)'], ['paid', 'Paid date (지급일)', 'date'], ['notes', 'Notes (메모)'], ['upd', 'Updated (수정일)', 'date']]},
+  cash: {tab: 'CASH', pre: 'C', money: true, need: ['date'], cols: [['id', 'ID'], ['date', 'Date (날짜)', 'date'], ['hand', 'Cash on hand (현금)', 'num'],
+    ['bri', 'Bank BRIZAIR CORP (은행)', 'num'], ['good', 'Bank GOODLIVING CORP (은행)', 'num'], ['by', 'By (작성)'], ['notes', 'Notes (메모)']]},
   prices: {tab: 'MATERIAL PRICES', readOnly: true, cols: [['item', 'Item (자재)'], ['knp', 'KNP price (KNP 가격)', 'num'], ['hisys', 'Hisys price (Hisys 가격)', 'num'], ['notes', 'Notes (메모)']]}
 };
 function recRows_(k) {

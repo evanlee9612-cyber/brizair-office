@@ -771,25 +771,78 @@
       <div class="s clip">${esc([r.remarks, r.ref].filter(Boolean).join(' · '))}</div></span>
       <span class="r"><div class="num" style="font-weight:800">${peso(r.bal)}</div><span class="pill p-${esc(r.status)}">${esc(r.status || '')}</span></span></button>`;
   }
+  // Jheena's money: payables (PAYABLES tab), cash & bank (CASH tab), AR report like her Excel
+  const isSalary = x => /salary/i.test(x.name || '');
+  const payOpen = () => (D().payables || []).filter(x => (x.status || 'Open') !== 'Paid');
+  const cashLast = () => (D().cash || []).filter(c => c.date).slice().sort((a, b) => a.date.localeCompare(b.date)).pop() || null;
+  const cashSum = c => c ? (+c.hand || 0) + (+c.bri || 0) + (+c.good || 0) : 0;
+  function payRow(x) {
+    return `<div class="item"><span class="grow"><div class="t clip">${esc(x.name)}</div><div class="s clip">${esc([x.due ? 'Due ' + x.due : '', x.status === 'Paid' && x.paid ? 'Paid ' + fmtD(x.paid, {year: 'numeric'}) : '', x.notes].filter(Boolean).join(' · '))}</div></span>
+      <span class="r"><div class="num" style="font-weight:800">${peso(x.amount)}</div>${x.status === 'Paid' ? '<span class="pill p-PAID">PAID</span>' : `<button class="btn sm" data-act="apPaid" data-r="${x.r}">Paid</button>`}</span></div>`;
+  }
   VIEWS.money = () => {
     const recs = (D().receivables || []).slice().sort((a, b) => b.bal - a.bal);
     const open = recs.filter(r => r.bal > 0), paid = recs.filter(r => r.bal <= 0);
     const total = D().arTotal != null ? D().arTotal : open.reduce((s, r) => s + r.bal, 0);
     const pays = (D().payments || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 30);
+    const ap = payOpen(), apTot = ap.reduce((s, x) => s + (+x.amount || 0), 0), cl = cashLast();
     const tab = S.money;
+    const T = [['ar', 'Unpaid'], ['pay', 'Payments'], ['ap', 'Payables'], ['cash', 'Cash'], ['paid', 'Paid']];
     return `
       <div class="row between wrap" style="margin-bottom:12px"><h1 style="margin:0">Money</h1>
-        <div class="row"><button class="btn sm" data-act="newAr">${ic('plus')} New contract</button><button class="btn primary sm" data-act="pay">${ic('peso')} Payment received</button></div></div>
-      <div class="stats" style="grid-template-columns:1fr 1fr">
-        <div class="stat"><span>Total unpaid</span><b>${peso(total)}</b></div>
-        <div class="stat"><span>Open accounts</span><b>${open.length}</b></div>
+        <div class="row wrap"><button class="btn sm" data-act="arReport">${ic('print')} AR report</button><button class="btn sm" data-act="newAr">${ic('plus')} New contract</button><button class="btn primary sm" data-act="pay">${ic('peso')} Payment received</button></div></div>
+      <div class="stats" style="grid-template-columns:1fr 1fr 1fr">
+        <button class="stat" data-act="moneyTab" data-t="ar"><span>Total unpaid</span><b style="font-size:18px">${peso(total, 0)}</b></button>
+        <button class="stat" data-act="moneyTab" data-t="ap"><span>We must pay</span><b style="font-size:18px">${peso(apTot, 0)}</b></button>
+        <button class="stat" data-act="moneyTab" data-t="cash"><span>Cash & bank${cl ? ' · ' + fmtD(cl.date) : ''}</span><b style="font-size:18px">${peso(cashSum(cl), 0)}</b></button>
       </div>
-      <div class="seg" style="margin-bottom:12px"><button class="${tab === 'ar' ? 'on' : ''}" data-act="moneyTab" data-t="ar">Unpaid</button><button class="${tab === 'pay' ? 'on' : ''}" data-act="moneyTab" data-t="pay">Payments</button><button class="${tab === 'paid' ? 'on' : ''}" data-act="moneyTab" data-t="paid">Fully paid</button></div>
+      <div class="seg" style="margin-bottom:12px;overflow-x:auto">${T.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="moneyTab" data-t="${t[0]}">${t[1]}</button>`).join('')}</div>
       ${tab === 'ar' ? `<div class="card"><div class="list">${open.map(arRow).join('') || '<div class="empty">Nothing unpaid 🎉</div>'}</div></div>` : ''}
       ${tab === 'paid' ? `<div class="card"><div class="list">${paid.map(arRow).join('') || '<div class="empty">—</div>'}</div></div>` : ''}
       ${tab === 'pay' ? `<div class="card"><div class="list">${pays.map(p => `<div class="item"><span class="grow"><div class="t clip">${esc(p.project)}</div><div class="s">${esc([fmtD(p.date, {year: 'numeric'}), p.method, p.by, p.notes].filter(Boolean).join(' · '))}</div></span><span class="r num" style="font-weight:800;color:var(--green)">${peso(p.amount)}</span></div>`).join('') || '<div class="empty">No payments recorded yet.<br>Tap “Payment received” when a customer pays.</div>'}</div></div>` : ''}
-      <p class="muted small mt">Balance NOW = balance on Nov 12 (from the old Excel) minus payments recorded here. Cash, bank, payables and salary notes are in the sheet tab FINANCE NOTES.</p>`;
+      ${tab === 'ap' ? `<div class="card"><div class="card-h"><h2>Payables (we must pay)</h2><button class="btn sm" data-act="apAdd">${ic('plus')} Add</button></div>
+        <div class="list">${ap.map(payRow).join('') || '<div class="empty">Nothing to pay</div>'}</div>
+        ${(D().payables || []).some(x => x.status === 'Paid') ? `<details style="margin-top:10px"><summary class="muted small">Paid (${(D().payables || []).filter(x => x.status === 'Paid').length})</summary><div class="list">${(D().payables || []).filter(x => x.status === 'Paid').map(payRow).join('')}</div></details>` : ''}</div>` : ''}
+      ${tab === 'cash' ? `<div class="card"><div class="card-h"><h2>Cash & bank</h2><button class="btn primary sm" data-act="cashAdd">${ic('plus')} Update balances</button></div>
+        ${cl ? `<dl class="kv"><dt>As of</dt><dd>${esc(fmtLong(cl.date))}</dd><dt>Cash on hand</dt><dd>${peso(cl.hand)}</dd><dt>Bank BRIZAIR CORP</dt><dd>${peso(cl.bri)}</dd><dt>Bank GOODLIVING CORP</dt><dd>${peso(cl.good)}</dd><dt>Total</dt><dd class="big">${peso(cashSum(cl))}</dd></dl>` : '<div class="empty">No balances yet</div>'}
+        <div class="list" style="margin-top:8px">${(D().cash || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(1, 8).map(c => `<div class="item"><span class="grow"><div class="t small">${esc(fmtD(c.date, {year: 'numeric'}))}</div><div class="s">${esc(['Cash ' + money(c.hand), 'BRIZAIR ' + money(c.bri), 'GOODLIVING ' + money(c.good), c.by].filter(Boolean).join(' · '))}</div></span><span class="r num">${peso(cashSum(c))}</span></div>`).join('')}</div></div>` : ''}
+      <p class="muted small mt">Unpaid = balance on Nov 12 minus payments recorded here. “AR report” prints the same report as the Excel “Account Receivable” (receivables, cash & bank, inventory, payables).</p>`;
   };
+  function arReportDoc(asOf) {
+    const recs = (D().receivables || []).filter(r => r.bal > 0);
+    const allPays = (D().oldPayments || []).concat((D().payments || []).map(p => ({project: p.project, date: p.date, amount: p.amount})));
+    const arTot = recs.reduce((s, r) => s + r.bal, 0), cl = cashLast(), cash = cashSum(cl);
+    const units = (D().units || []), onHand = stockSum(units, 'unit').cost, after = afterProject(units).afterCost;
+    const ap = payOpen(), apMain = ap.filter(x => !isSalary(x)), sal = ap.filter(isSalary);
+    const apTot = apMain.reduce((s, x) => s + (+x.amount || 0), 0), salTot = sal.reduce((s, x) => s + (+x.amount || 0), 0);
+    const arAll = arTot + cash + after, apAll = apTot + salTot;
+    const dt = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? fmtMDY(v) : esc(v || '');
+    const rows = recs.map(r => {
+      const ps = allPays.filter(p => p.project === r.project);
+      const n = Math.max(1, ps.length);
+      return Array.from({length: n}, (_, i) => `<tr>${i === 0 ? `<td rowspan="${n}">${esc(r.ref)}</td><td rowspan="${n}">${esc(r.project)}</td><td rowspan="${n}" class="r">${esc(/^-?[\d.]+$/.test(String(r.contract)) ? money(r.contract) : r.contract)}</td>` : ''}
+        <td>${ps[i] ? dt(ps[i].date) : ''}</td><td class="r">${ps[i] ? money(ps[i].amount) : ''}</td>
+        ${i === 0 ? `<td rowspan="${n}" class="r"><b>${money(r.bal)}</b></td><td rowspan="${n}">${esc(r.remarks)}</td>` : ''}</tr>`).join('');
+    }).join('');
+    return `<div class="doc wide">${letterhead()}<h3>ACCOUNT RECEIVABLE — As of ${esc(fmtMDY(asOf))}</h3>
+      <table><thead><tr><th>Quotation date / Ref</th><th>Location / Project</th><th class="r">Contract price</th><th>Payment date</th><th class="r">Amount paid</th><th class="r">Total balance</th><th>Remarks</th></tr></thead>
+      <tbody>${rows}<tr><td colspan="5" class="r"><b>TOTAL</b></td><td class="r"><b>${money(arTot)}</b></td><td></td></tr></tbody></table>
+      <table style="margin-top:10px;width:60%"><tr><td>CASH ON HAND ${cl ? esc(fmtMDY(cl.date)) : ''}</td><td class="r">${cl ? money(cl.hand) : '—'}</td></tr>
+        <tr><td>CASH IN BANK (BRIZAIR CORP)</td><td class="r">${cl ? money(cl.bri) : '—'}</td></tr>
+        <tr><td>CASH IN BANK (GOODLIVING CORP)</td><td class="r">${cl ? money(cl.good) : '—'}</td></tr>
+        <tr><td><b>TOTAL CASH</b></td><td class="r"><b>${money(cash)}</b></td></tr>
+        <tr><td>INVENTORY ON HAND (at cost)</td><td class="r">${money(onHand)}</td></tr>
+        <tr><td>INVENTORY AFTER PROJECT (on hand, at cost)</td><td class="r">${money(after)}</td></tr></table>
+      <p style="margin:12px 0 4px"><b>ACCOUNTS PAYABLE</b></p>
+      <table style="width:80%"><tr><th>Due date</th><th>Name of company</th><th class="r">Amount</th></tr>
+        ${apMain.map(x => `<tr><td>${esc(x.due)}</td><td>${esc(x.name)}</td><td class="r">${money(x.amount)}</td></tr>`).join('')}
+        <tr><td colspan="2" class="r"><b>TOTAL PAYABLES</b></td><td class="r"><b>${money(apTot)}</b></td></tr>
+        ${sal.map(x => `<tr><td></td><td>${esc(x.name)}</td><td class="r">${money(x.amount)}</td></tr>`).join('')}</table>
+      <table style="margin-top:10px;width:60%"><tr><td>ACCTS RECEIVABLE <span class="tiny">(unpaid + cash + inventory after project)</span></td><td class="r">${money(arAll)}</td></tr>
+        <tr><td>ACCTS PAYABLE <span class="tiny">(payables + salary)</span></td><td class="r">${money(apAll)}</td></tr>
+        <tr><td><b>INCOME</b></td><td class="r"><b>${money(arAll - apAll)}</b></td></tr></table>
+      <div class="sig"><div>Prepared by<br><b>${esc(S.me ? S.me.name : '')}</b></div><div>Checked by</div><div>Approved by</div></div></div>`;
+  }
 
   // quotes & forms
   const docRow = q => `<button class="item" data-go="quote/${esc(q.no)}"><span class="grow"><div class="t clip">${esc(q.no)} · ${esc(q.customer)}</div>
@@ -1739,6 +1792,41 @@
     },
     ar: el => { const r = (D().receivables || []).find(x => x.r === +el.dataset.r); if (r) arSheet(r); },
     moneyTab: el => { S.money = el.dataset.t; render(); },
+    arReport: () => printHtml(arReportDoc(today()), true),
+    apAdd: () => openSheet('Add payable', `<form id="fap">
+      ${field('Pay to *', `<input name="name" required list="dlsup" placeholder="e.g. LG ELECTRONICS PHILIPPINES INC.">`)}${dl('dlsup', Array.from(new Set((D().payables || []).map(x => x.name).concat((D().suppliers || []).map(x => x.name)))))}
+      <div class="f2">${field('Amount *', `<input name="amount" inputmode="decimal" required>`)}${field('Due', `<input name="due" placeholder="e.g. Dec 7, 2026">`)}</div>
+      ${field('Notes', `<input name="notes" placeholder="Invoice #, PO #…">`)}</form>`,
+      `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="apSave">Save</button>`),
+    apSave: async el => {
+      const f = formData('#fap'); if (!f.name || !(+String(f.amount).replace(/,/g, '') > 0)) return toast('Pay to and amount are needed', true);
+      el.disabled = true;
+      try { await save('recSave', {k: 'payables', set: {name: f.name, amount: String(f.amount).replace(/,/g, ''), due: f.due, notes: f.notes, status: 'Open'}}, 'Payable added ✓'); } catch (e) { el.disabled = false; }
+    },
+    apPaid: el => {
+      const x = (D().payables || []).find(p => p.r === +el.dataset.r); if (!x) return;
+      S.apX = x;
+      openSheet('Mark as paid', `<p class="small" style="margin:0 0 10px">${esc(x.name)} · ${peso(x.amount)}</p><form id="fapp">
+        ${field('Paid date', `<input type="date" name="paid" value="${today()}">`)}${field('Notes', `<input name="notes" value="${esc(x.notes || '')}" placeholder="Check #, bank…">`)}</form>`,
+        `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="apPaidSave">Paid ✓</button>`);
+    },
+    apPaidSave: async el => {
+      const x = S.apX, f = formData('#fapp'); el.disabled = true;
+      try { await save('recSave', {k: 'payables', r: x.r, id: x.id, set: {status: 'Paid', paid: f.paid || today(), notes: f.notes}}, 'Marked paid ✓'); } catch (e) { el.disabled = false; }
+    },
+    cashAdd: () => { const c = cashLast() || {}; openSheet('Update cash & bank', `<form id="fcash">
+      ${field('Date', `<input type="date" name="date" value="${today()}">`)}
+      ${field('Cash on hand', `<input name="hand" inputmode="decimal" value="${esc(c.hand ?? '')}">`)}
+      ${field('Bank BRIZAIR CORP', `<input name="bri" inputmode="decimal" value="${esc(c.bri ?? '')}">`)}
+      ${field('Bank GOODLIVING CORP', `<input name="good" inputmode="decimal" value="${esc(c.good ?? '')}">`)}
+      ${field('Notes', `<input name="notes">`)}<p class="hint">Last numbers are filled in — change only what moved.</p></form>`,
+      `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="cashSave">Save</button>`); },
+    cashSave: async el => {
+      const f = formData('#fcash'), n = v => String(v || '').replace(/,/g, '');
+      if (!f.date) return toast('Date is needed', true);
+      el.disabled = true;
+      try { await save('recSave', {k: 'cash', set: {date: f.date, hand: n(f.hand), bri: n(f.bri), good: n(f.good), notes: f.notes, by: S.me ? S.me.name : ''}}, 'Balances saved ✓'); } catch (e) { el.disabled = false; }
+    },
     soa: el => {
       const r = (D().receivables || []).find(x => x.r === +el.dataset.r); if (!r) return;
       const key = lc(r.project).split(/[\s.]+/)[0];
@@ -1942,7 +2030,8 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.t && Date.now() - (S._lastRefresh || 0) > 120000) { S._lastRefresh = Date.now(); refresh(true); } });
 
   /** one-time "What's new" popup — change NOTICE.id to show a new one; each phone shows it until "Got it" */
-  const NOTICE = {id: '2026-11-16b', title: 'What’s new (Nov 16)', items: [
+  const NOTICE = {id: '2026-11-16c', title: 'What’s new (Nov 16)', items: [
+    ['📊 Money for Jheena — no more Excel', 'Money now has Payables (we must pay → tap Paid), Cash & bank (Update balances) and “AR report”, which prints the same report as your Excel “Account Receivable” (receivables, cash, inventory, payables, income). Customer paid → “Payment received”. Nov 13 numbers from your file are already in.'],
     ['💵 Receivables (Jheena’s file, Nov 13)', 'Updated in Money. New: PHIEXCEL P.O 2026-000741 (balance ₱5,247). 11 old Philexcel 10% retention lines (₱223,813.78) are not in your file — were they paid? Please tell us. They stay in the list (marked “CHECK”) until confirmed.'],
     ['🧽 Cleaning list (Ladie’s AS Summary Report)', 'New tab CLEANING DUE in the Google Sheet: 213 customers with last cleaning and next cleaning (6 months). 84 are overdue, 2 are due within 30 days. Filter by Status. Home → “Cleaning due soon” also uses it now.'],
     ['✅ Schedule: Done + work done', 'When you tap Done, write Complain and Work done (saved in Notes as “Complain: … / Work Done: …”). For Cleaning jobs, tick the units you cleaned — their next cleaning date is set by itself.'],
