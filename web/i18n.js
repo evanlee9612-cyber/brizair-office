@@ -51,7 +51,7 @@
     'New job now has a “Complain / request” box under Customer (e.g. Water leaking, Not cooling, Cleaning). It is saved in Notes as “Complain: …”, so when you tap Done you only write the Work done.': '새 일정 입력에 손님 칸 아래 “손님 요청·문제” 칸이 생겼어요(예: 물 샘, 냉방 안 됨, 청소). 메모에 “Complain: …”으로 저장돼서, 완료할 때는 한 일만 쓰면 돼요.',
     'The new date now starts at the next day, so you don’t have to change it again after saving. Same day and same time is blocked.': '새 날짜가 다음 날로 먼저 채워져서 저장 후 다시 고칠 필요가 없어요. 같은 날 같은 시간으로는 옮길 수 없어요.',
     '💡 Your 3 requests (Nov 17)': '💡 요청 3건 (11/17)',
-    'What’s new (Nov 17, evening)': '새 기능 (11/17 저녁)', '⏳ Pending jobs (no date yet)': '⏳ 대기 일정 (날짜 아직 없음)', '💵 Service SOA (service & cleaning)': '💵 서비스 SOA (AS·청소)', '✅ Job done': '✅ 작업 완료',
+    'What’s new (Nov 17, evening)': '새 기능 (11/17 저녁)', '⏳ Pending jobs (no date yet)': '⏳ 대기 일정 (날짜 아직 없음)', '💵 Service SOA (service & cleaning)': '💵 서비스 SOA (AS·청소)', '✅ Job done': '✅ 작업 완료', 'Open Service SOA': '서비스 SOA 열기',
     'New job → tick “Pending — no date yet” (waiting for parts / customer). See them in Schedule → Pending. When you know the day: open the job → “📅 Set the date” and it goes to the calendar.': '새 일정 → “대기 — 날짜 아직 없음” 체크(부품·손님 기다리는 중). 일정 → 대기에서 모아 봐요. 날짜가 정해지면 일정 열기 → “📅 날짜 정하기” 하면 달력에 들어가요.',
     'Open a service / cleaning job → “Set charge” (or “No charge” for warranty). When the customer pays → “Payment received”. More → Service SOA shows who still has to pay, prints the SOA per customer and the collection list.': 'AS·청소 일정 열기 → “청구 금액 넣기”(보증이면 “무료”). 손님이 돈을 내면 → “입금 받음”. 더보기 → 서비스 SOA에서 안 낸 손님을 보고, 손님별 SOA와 수금 목록을 출력해요.',
     'When you tap Done on a service / cleaning job you can also write the charge.': 'AS·청소 일정에서 완료를 누를 때 청구 금액도 같이 쓸 수 있어요.',

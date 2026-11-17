@@ -2245,11 +2245,11 @@
     ['✅ Job done', 'When you tap Done on a service / cleaning job you can also write the charge.']]};
   function showNotice() {
     if (LS.get('brz_notice', '') === NOTICE.id || $('.veil')) return;
-    const url = (D().sheetUrl || 'https://docs.google.com/spreadsheets/d/1jahKP1N3VVmiBqSXlr3xbmJxORVAWFVQNtxMLyqbCKE/edit') + '#gid=118798267';
     openSheet(NOTICE.title, `<div class="list">${NOTICE.items.map(x => `<div class="item"><span class="grow"><div class="t">${x[0]}</div><div class="s" style="white-space:normal">${x[1]}</div></span></div>`).join('')}</div>`,
-      `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">${ic('sheet')} Open cleaning list</a><button class="btn primary" data-act="noticeOk">Got it</button>`);
+      `<button class="btn" data-act="noticeSoa">${ic('doc')} Open Service SOA</button><button class="btn primary" data-act="noticeOk">Got it</button>`);
   }
   ACT.noticeOk = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); setTimeout(showSurvey, 600); };
+  ACT.noticeSoa = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); go('soa'); };
   Object.assign(ACT, REQ_ACTS);
 
   function start() {
