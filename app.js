@@ -198,7 +198,7 @@
   // ───────── shell ─────────
   const NAV = [
     ['home', 'Home', 'home'], ['ask', 'Ask GPT', 'chat'], ['schedule', 'Schedule', 'cal'], ['stock', 'Stock', 'box'], ['orders', 'Orders (PO)', 'inbox'], ['customers', 'Customers', 'users'],
-    ['money', 'Money', 'peso'], ['materials', 'Materials for AI', 'book'], ['quotes', 'Quotes & Invoices', 'doc'], ['report', 'LG Monthly Report', 'chart'], ['activity', 'Activity', 'log']
+    ['money', 'Money', 'peso'], ['materials', 'Materials for AI', 'book'], ['quotes', 'Quotes & Invoices', 'doc'], ['report', 'LG Monthly Report', 'chart'], ['activity', 'Activity', 'log'], ['requests', 'Ask for a change', 'help']
   ];
   function shell() {
     document.body.innerHTML = `
@@ -242,7 +242,7 @@
     S.route = name;
     document.body.dataset.route = name;
     const tabFor = {cust: 'customers', materials: 'ask'}[name] || name;
-    $$('.me').forEach(b => b.classList.toggle('on', ['more', 'money', 'quotes', 'quote', 'report', 'activity', 'help', 'orders'].includes(name)));
+    $$('.me').forEach(b => b.classList.toggle('on', ['more', 'money', 'quotes', 'quote', 'report', 'activity', 'help', 'orders', 'requests'].includes(name)));
     $$('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.go === tabFor));
     $$('.side button[data-go]').forEach(b => b.classList.toggle('on', b.dataset.go === ({cust: 'customers', quote: 'quotes'}[name] || name)));
     const main = $('#main');
@@ -1036,12 +1036,55 @@
     $('#repAll') && $('#repAll').addEventListener('change', e => { S.rep.all = e.target.checked; render(); });
   };
 
+  // staff tell us what they need (tab REQUESTS) — Evan's daily check reads it, changes the site and writes the reply
+  const REQ_ST = {New: 'p-UNPAID', Doing: 'p-PARTIAL', Done: 'p-PAID', 'Not now': 'p-Moved'};
+  VIEWS.requests = () => {
+    const all = (D().requests || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.r - a.r);
+    return `<h1>Ask for a change</h1><p class="sub">Something slow, confusing, missing — or still done in Excel / paper? Tell us here. We read it every day, change the website, and answer below.</p>
+      <div class="card">${reqForm()}<div class="btns" style="margin-top:8px"><button class="btn primary" data-act="reqSave">Send</button></div></div>
+      <div class="card"><div class="card-h"><h2>Requests</h2></div><div class="list">${all.map(x => `<div class="item"><span class="grow">
+        <div class="t" style="white-space:normal">${esc(x.text)}</div><div class="s">${esc([x.who, x.date ? fmtD(x.date, {year: 'numeric'}) : '', x.type].filter(Boolean).join(' · '))}</div>
+        ${x.reply ? `<div class="small" style="margin-top:6px;white-space:normal">↳ ${esc(x.reply)}</div>` : ''}</span>
+        <span class="r"><span class="pill ${REQ_ST[x.status] || 'p-UNPAID'}">${esc(x.status || 'New')}</span></span></div>`).join('') || '<div class="empty">No requests yet</div>'}</div></div>`;
+  };
+  const reqForm = () => `<form id="freq">${field('What do you need?', `<textarea name="text" placeholder="e.g. I want to see all cleaning jobs this week · Payment screen needs the OR number · I still write the daily report in Excel"></textarea>`)}
+    ${field('Type', choice('type', ['Change / new feature', 'Problem / error', 'Still in Excel / paper'], 'Change / new feature'))}</form>`;
+  async function sendRequests(list) {
+    for (const x of list) await call('recSave', {k: 'requests', set: {date: today(), who: S.me ? S.me.name : '', type: x.type, text: x.text, status: 'New'}});
+    await refresh(true);
+  }
+  const REQ_ACTS = {};
+  REQ_ACTS.reqSave = async el => {
+    const f = formData('#freq'); if (!f.text) return toast('Write what you need', true);
+    el.disabled = true; toast('Sending…', false, 60000);
+    try { await sendRequests([{type: f.type, text: f.text}]); render(); toast('Sent ✓ Thank you!'); } catch (e) { toast(e.message, true); el.disabled = false; }
+  };
+  // one-time short survey (asks what they still need)
+  const SURVEY = {id: '2026-11-17', qs: [['excel', 'What do you still do in Excel, on paper or in chat instead of this website?', 'Still in Excel / paper'],
+    ['slow', 'What is slow or confusing on this website?', 'Problem / error'], ['want', 'What would make your work easier? (anything)', 'Change / new feature']]};
+  function showSurvey() {
+    const st = LS.get('brz_survey', {});
+    if (st.id === SURVEY.id && (st.done || st.later === today())) return false;
+    if ($('.veil')) return false;
+    openSheet('Help us make this easier 🙏', `<p class="small" style="margin:0 0 10px">3 quick questions. Write in English, Tagalog or Korean — short is fine. We read every answer and change the website for you.</p>
+      <form id="fsurv">${SURVEY.qs.map(q => field(q[1], `<textarea name="${q[0]}" style="min-height:70px"></textarea>`)).join('')}</form>`,
+      `<button class="btn" data-act="survLater">Later</button><button class="btn primary" data-act="survSend">Send</button>`);
+    return true;
+  }
+  REQ_ACTS.survLater = () => { LS.set('brz_survey', {id: SURVEY.id, later: today()}); closeSheet(); };
+  REQ_ACTS.survSend = async el => {
+    const f = formData('#fsurv'), list = SURVEY.qs.filter(q => f[q[0]]).map(q => ({type: q[2], text: q[1].replace(/\?.*$/, '?') + ' → ' + f[q[0]]}));
+    if (!list.length) return toast('Write at least one answer (or tap Later)', true);
+    el.disabled = true; toast('Sending…', false, 60000);
+    try { await sendRequests(list); LS.set('brz_survey', {id: SURVEY.id, done: true}); closeSheet(); render(); toast('Sent ✓ Thank you!'); } catch (e) { toast(e.message, true); el.disabled = false; }
+  };
+
   VIEWS.activity = () => `<h1>Activity</h1><p class="sub">Latest changes made on this site (also saved in the sheet tab APP LOG).</p>
     <div class="card"><div class="list">${(D().log || []).map(l => `<div class="item"><span class="avatar">${esc(initials(l.who))}</span><span class="grow"><div class="t small">${esc(l.who)} · ${esc(l.action)}</div><div class="s">${esc(l.details)}</div></span><span class="r muted small">${esc(l.time)}</span></div>`).join('') || '<div class="empty">No activity yet</div>'}</div></div>`;
 
   VIEWS.more = () => `<h1>More</h1><p class="sub">Logged in as <b>${esc(S.me && S.me.name)}</b></p>
     <div class="card"><div class="list">
-      ${[['ask', 'Ask GPT', 'chat', 'c-blue'], ['materials', 'Materials for AI (upload)', 'book', 'c-violet'], ['orders', 'Orders (PO) & suppliers', 'inbox', 'c-teal'], ['money', 'Money — unpaid & payments', 'peso', 'c-amber'], ['quotes', 'Quotes, invoices & forms', 'doc', 'c-red'], ['report', 'LG Monthly Report', 'chart', 'c-green'], ['activity', 'Activity', 'log', 'c-blue'], ['help', 'Help', 'help', 'c-violet']]
+      ${[['ask', 'Ask GPT', 'chat', 'c-blue'], ['materials', 'Materials for AI (upload)', 'book', 'c-violet'], ['orders', 'Orders (PO) & suppliers', 'inbox', 'c-teal'], ['money', 'Money — unpaid & payments', 'peso', 'c-amber'], ['quotes', 'Quotes, invoices & forms', 'doc', 'c-red'], ['report', 'LG Monthly Report', 'chart', 'c-green'], ['activity', 'Activity', 'log', 'c-blue'], ['requests', '💡 Ask for a change / report a problem', 'help', 'c-amber'], ['help', 'Help', 'help', 'c-violet']]
         .map(x => `<button class="item" data-go="${x[0]}"><span class="qi ${x[3]}" style="width:38px;height:38px">${ic(x[2])}</span><span class="grow t">${x[1]}</span>${ic('right')}</button>`).join('')}
       <button class="item" data-act="lang"><span class="qi c-blue" style="width:38px;height:38px"><b class="noi18n">A/가</b></span><span class="grow t">Language</span><span class="muted small noi18n">${lang() === 'ko' ? '한국어 → English' : 'English → 한국어'}</span></button>
       <button class="item" data-act="openSheet"><span class="qi c-teal" style="width:38px;height:38px">${ic('sheet')}</span><span class="grow t">Open Google Sheet</span>${ic('right')}</button>
@@ -2042,14 +2085,15 @@
     openSheet(NOTICE.title, `<div class="list">${NOTICE.items.map(x => `<div class="item"><span class="grow"><div class="t">${x[0]}</div><div class="s" style="white-space:normal">${x[1]}</div></span></div>`).join('')}</div>`,
       `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">${ic('sheet')} Open cleaning list</a><button class="btn primary" data-act="noticeOk">Got it</button>`);
   }
-  ACT.noticeOk = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); };
+  ACT.noticeOk = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); setTimeout(showSurvey, 600); };
+  Object.assign(ACT, REQ_ACTS);
 
   function start() {
     shell();
     render();
     S._lastRefresh = Date.now();
     refresh(!!S.D);
-    setTimeout(showNotice, LS.get('brz_seen_help', false) ? 900 : 4000);
+    setTimeout(() => { showNotice(); if (!$('.veil')) showSurvey(); }, LS.get('brz_seen_help', false) ? 900 : 4000);
   }
   if (S.t) start(); else renderLogin();
   window.BRZ = {S, render, refresh};
