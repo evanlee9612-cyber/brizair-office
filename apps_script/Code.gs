@@ -12,7 +12,7 @@
  * AI answers: questions go to tab ASK. Sir Kim's PC (ask_relay.py + Codex/ChatGPT) picks them up with
  *   RELAY_KEY (Script Property, set once by Evan) and writes the answer back. Materials: tab KNOWLEDGE + Drive folder.
  */
-var VERSION = '2.0';
+var VERSION = '2.1';
 var SHEET_ID = '1jahKP1N3VVmiBqSXlr3xbmJxORVAWFVQNtxMLyqbCKE';
 var TZ = 'Asia/Manila';
 var SESSION_DAYS = 90;
@@ -303,7 +303,7 @@ function boot_(req, me, parts) {
   var out = {ok: true, me: {name: me.name, role: me.role}, at: new Date().toISOString(), v: VERSION, sections: parts || SECTIONS,
     sheetUrl: 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit', jobs: JOBS, statuses: STATUSES, methods: METHODS};
   var T, i, names = [];
-  if (want.stock) names.push('UNITS', 'PARTS', 'UNIT IN-OUT', 'PART IN-OUT', RES_TAB, 'ORDERS', 'OTHER STOCK', 'PART ISSUES', 'SUPPLIERS', 'MATERIAL PRICES');
+  if (want.stock) names.push('UNITS', 'PARTS', 'UNIT IN-OUT', 'PART IN-OUT', RES_TAB, 'ORDERS', 'OTHER STOCK', 'PART ISSUES', 'SUPPLIERS', 'MATERIAL PRICES', 'REQUESTS');
   if (want.schedule) names.push('SCHEDULE');
   if (want.money) names.push('RECEIVABLES', 'PAYMENTS', 'OLD PAYMENTS', 'PAYABLES', 'CASH');
   if (want.customers) names.push('CUSTOMERS');
@@ -550,6 +550,8 @@ var RECS = {
     ['amount', 'Amount (금액)', 'num'], ['status', 'Status (상태)'], ['paid', 'Paid date (지급일)', 'date'], ['notes', 'Notes (메모)'], ['upd', 'Updated (수정일)', 'date']]},
   cash: {tab: 'CASH', pre: 'C', money: true, need: ['date'], cols: [['id', 'ID'], ['date', 'Date (날짜)', 'date'], ['hand', 'Cash on hand (현금)', 'num'],
     ['bri', 'Bank BRIZAIR CORP (은행)', 'num'], ['good', 'Bank GOODLIVING CORP (은행)', 'num'], ['by', 'By (작성)'], ['notes', 'Notes (메모)']]},
+  requests: {tab: 'REQUESTS', pre: 'Q', need: ['text'], cols: [['id', 'ID'], ['date', 'Date (날짜)', 'date'], ['who', 'Who (누가)'], ['type', 'Type (종류)'],
+    ['text', 'Request (요청)'], ['status', 'Status (상태)'], ['reply', 'Reply (답)'], ['upd', 'Updated (수정일)', 'date']]},
   prices: {tab: 'MATERIAL PRICES', readOnly: true, cols: [['item', 'Item (자재)'], ['knp', 'KNP price (KNP 가격)', 'num'], ['hisys', 'Hisys price (Hisys 가격)', 'num'], ['notes', 'Notes (메모)']]}
 };
 function recRows_(k) {

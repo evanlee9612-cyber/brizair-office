@@ -6,6 +6,7 @@ Evan의 말: "레이디가 쓰게 편하게 최적화를 계속 해주는게 좋
 1. 지난 점검 이후 기록 읽기 (Sheets MCP, 시트 `1jahKP1N3VVmiBqSXlr3xbmJxORVAWFVQNtxMLyqbCKE`)
    - `'APP LOG'!A:D`: 마지막 점검 시각은 `logs/daily_check.log` 맨 아래 줄에 있다.
    - `ASK!A:F`: 새 질문과 GPT 답. "할 수 있어?", "추가해 줘" 같은 요청이 있는지 본다.
+   - **`REQUESTS!A:H`(가장 중요)**: 직원이 사이트 '💡 Ask for a change'나 설문으로 직접 남긴 요청이다. Status가 New인 줄을 모두 처리한다. 바로 고쳤으면 Done, 진행 중이면 Doing, 서버나 큰 변경이 필요하면 Doing으로 두고 Evan에게 보고, 안 하기로 했으면 Not now로 바꾼다. Reply 칸에는 직원이 읽을 짧은 영어 답(어디를 누르면 되는지)을, Updated 칸에는 오늘 날짜를 Sheets MCP로 넣는다. 날짜는 `'` 없이 MM/DD/YYYY로 넣는다.
    - KNOWLEDGE 새 줄: 직원이 올린 파일. Evan 규칙에 따라 업로드 파일은 읽고 반영한다. 큰 파일은 `~/Library/CloudStorage/GoogleDrive-evanlee9612@gmail.com/내 드라이브/BRIZAIR Office (Bot + Sheets)/Materials for AI (uploads)/`에서 복사해 `/tmp/briz_venv`(openpyxl)로 연다.
 2. 불편 신호 찾기
    - 같은 손질을 여러 번 반복하는 것 (예: 메모를 손으로 고치기, Moved 후 새 일정을 따로 만들기)
@@ -25,7 +26,7 @@ Evan의 말: "레이디가 쓰게 편하게 최적화를 계속 해주는게 좋
 ## 지켜야 할 것
 - PIN(`~/.config/brizair/office_pins.txt`)과 시트 키는 절대 출력하지 않는다.
 - 금액·입금 데이터는 추측해서 넣지 않는다. 확인이 필요하면 "확인 필요"로 표시하고 보고한다.
-- 직원에게 직접 메시지를 보내지 않는다. 알릴 것은 사이트 공지 팝업으로만 알린다.
+- 직원에게 직접 메시지를 보내지 않는다. 알릴 것은 사이트 공지 팝업과 REQUESTS의 Reply로만 알린다. 직원에게 다시 물어볼 게 있으면 설문(app.js SURVEY의 id·qs 교체)으로 묻는다.
 - 큰 변경(새 화면, 기존 흐름 바꾸기)은 하지 않는다. 제안만 보고한다.
 
 ## 서버 필요 후보 (쌓아 두기)
