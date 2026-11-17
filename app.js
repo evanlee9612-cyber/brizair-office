@@ -2070,6 +2070,19 @@
     if (a && ACT[a.dataset.act]) ACT[a.dataset.act](a);
   });
   window.addEventListener('hashchange', render);
+  // new website version → reload by itself (only when nothing is open or being typed), so staff never need to refresh
+  const APP_V = +((($('script[src*="app.js"]') || {}).src || '').match(/[?&]v=(\d+)/) || [])[1] || 0;
+  async function checkUpdate() {
+    if (DEMO || !APP_V) return;
+    try {
+      const h = await (await fetch('index.html?cb=' + Date.now(), {cache: 'no-store'})).text();
+      const v = +(h.match(/app\.js\?v=(\d+)/) || [])[1] || 0;
+      const ae = document.activeElement, busy = $('.veil') || (ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName)) || document.body.classList.contains('printing');
+      if (v > APP_V && !busy) location.reload();
+    } catch (e) { /* offline — try next time */ }
+  }
+  setInterval(checkUpdate, 10 * 60000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.t && Date.now() - (S._lastRefresh || 0) > 120000) { S._lastRefresh = Date.now(); refresh(true); } });
 
   /** one-time "What's new" popup — change NOTICE.id to show a new one; each phone shows it until "Got it" */
