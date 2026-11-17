@@ -32,3 +32,5 @@ Evan의 말: "레이디가 쓰게 편하게 최적화를 계속 해주는게 좋
 ## 서버 필요 후보 (쌓아 두기)
 - 일정 상태 "Pending (parts)" 추가. 지금은 Ladie가 메모에 "PENDING"이라고 적고 있다 (11/16 MONTPAC).
 - 청소한 기계 여러 대를 한 번에 저장하는 기능(cleaningDone 묶음 처리). 지금은 기계 1대마다 요청을 따로 보내서 느리다.
+- (11/17 Ladie 요청 REQUESTS 2·3행) 날짜 없는 "대기(Pending)" 일정 목록. 위 Pending 상태와 함께 만들면 됨 (날짜 빈칸 허용 + Pending 목록).
+- (11/17 Ladie 요청 REQUESTS 4행) 서비스·청소용 SOA: 일정(Service/Cleaning)마다 청구 금액·수금 상태를 두고 미수 목록·SOA 출력. 새 화면이라 Evan 결정 필요.
