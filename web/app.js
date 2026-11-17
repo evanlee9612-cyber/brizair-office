@@ -2239,17 +2239,23 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.t && Date.now() - (S._lastRefresh || 0) > 120000) { S._lastRefresh = Date.now(); refresh(true); } });
 
   /** one-time "What's new" popup — change NOTICE.id to show a new one; each phone shows it until "Got it" */
-  const NOTICE = {id: '2026-11-17b', title: 'What’s new (Nov 17, evening)', items: [
+  const NOTICE = {id: '2026-11-17b', who: ['Ladie'], title: 'What’s new (Nov 17, evening)', items: [
     ['⏳ Pending jobs (no date yet)', 'New job → tick “Pending — no date yet” (waiting for parts / customer). See them in Schedule → Pending. When you know the day: open the job → “📅 Set the date” and it goes to the calendar.'],
     ['💵 Service SOA (service & cleaning)', 'Open a service / cleaning job → “Set charge” (or “No charge” for warranty). When the customer pays → “Payment received”. More → Service SOA shows who still has to pay, prints the SOA per customer and the collection list.'],
     ['✅ Job done', 'When you tap Done on a service / cleaning job you can also write the charge.']]};
-  function showNotice() {
-    if (LS.get('brz_notice', '') === NOTICE.id || $('.veil')) return;
+  const noticeForMe = () => !NOTICE.who || (S.me && NOTICE.who.some(w => lc(S.me.name).startsWith(lc(w))));
+  /** shows after login / start; if another window (help, a form) is open or she is typing, it waits and tries again */
+  function showNotice(tries) {
+    clearTimeout(S._noticeT);
+    if (!S.t || !noticeForMe() || LS.get('brz_notice', '') === NOTICE.id) return;
+    const ae = document.activeElement, typing = ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName) && !$('.pad');
+    if ($('.veil') || typing || !S.D) { if ((tries || 0) < 200) S._noticeT = setTimeout(() => showNotice((tries || 0) + 1), 3000); return; }
     openSheet(NOTICE.title, `<div class="list">${NOTICE.items.map(x => `<div class="item"><span class="grow"><div class="t">${x[0]}</div><div class="s" style="white-space:normal">${x[1]}</div></span></div>`).join('')}</div>`,
-      `<button class="btn" data-act="noticeSoa">${ic('doc')} Open Service SOA</button><button class="btn primary" data-act="noticeOk">Got it</button>`);
+      `<div class="btns" style="width:100%"><button class="btn" data-act="noticePend">${ic('cal')} Pending list</button><button class="btn" data-act="noticeSoa">${ic('doc')} Service SOA</button><button class="btn primary" data-act="noticeOk">Got it</button></div>`);
   }
   ACT.noticeOk = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); setTimeout(showSurvey, 600); };
   ACT.noticeSoa = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); go('soa'); };
+  ACT.noticePend = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); ACT.pendList(); };
   Object.assign(ACT, REQ_ACTS);
 
   function start() {
@@ -2257,7 +2263,7 @@
     render();
     S._lastRefresh = Date.now();
     refresh(!!S.D);
-    setTimeout(() => { showNotice(); if (!$('.veil')) showSurvey(); }, LS.get('brz_seen_help', false) ? 900 : 4000);
+    setTimeout(() => { showNotice(); if (!$('.veil')) showSurvey(); }, LS.get('brz_seen_help', false) ? 900 : 2500);
   }
   if (S.t) start(); else renderLogin();
   window.BRZ = {S, render, refresh};
