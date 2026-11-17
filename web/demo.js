@@ -45,6 +45,9 @@
       [-1, '1:00 PM', 'Service (AS)', 'Pampanga Dental Clinic', 'MacArthur Hwy', 'Water leak', 'Jun', 'Done'],
       [6, '11:00 AM', 'Meeting', 'Blue Lagoon Hotel', 'Clark', 'New wing 12 units', '', 'Scheduled']
     ].map((x, i) => ({r: i + 2, date: add(x[0]), time: x[1], job: x[2], customer: x[3], location: x[4], units: x[5], tech: x[6], status: x[7], notes: '', by: 'Ladie', id: 'DEMO-S-' + i}));
+    sched.push({r: sched.length + 2, date: '', time: '', job: 'Service (AS)', customer: 'Golden Star Office', location: 'Mabalacat', units: '1 × ceiling cassette', tech: '', status: 'Pending', notes: 'Complain: Not cooling / waiting for PCB (LG order)', by: 'Ladie', id: 'DEMO-S-P1'});
+    sched.push({r: sched.length + 2, date: add(-4), time: '9:00 AM', job: 'Cleaning', customer: 'Green Leaf Cafe', location: 'Nepo Mart', units: '3 units', tech: 'Rommel', status: 'Done', notes: 'Work Done: General cleaning 3 units', by: 'Ladie', id: 'DEMO-S-C1', charge: 2400, paid: 1000, paidDate: add(-3), payRef: 'Cash OR 1201', pay: 'Partial'});
+    Object.assign(sched.find(j => j.customer === 'Pampanga Dental Clinic'), {notes: 'Complain: Water leak / Work Done: Flush out drain', charge: 1500, pay: 'Unpaid'});
     const receivables = [
       ['Blue Lagoon Hotel P.O 1021', 'Q-2026-0003', '480,000.00', 240000, 'PARTIAL', '50% upon completion'], ['Golden Star Office P.O 77', '', '196,980.00', 19698, 'PARTIAL', '10% retention'],
       ['Sunrise Bakery', 'Q-2026-0005', '43,498.00', 43498, 'UNPAID', 'due on install'], ['Pampanga Dental Clinic', '', '16,500.00', 16500, 'UNPAID', 'service + parts']
@@ -53,7 +56,7 @@
       {r: 3, date: add(-5), item: 'HSN12ISB/HSU12ISB', dir: 'IN', qty: 3, party: 'LG Electronics Philippines', ref: 'PO 2026-08', by: 'Ladie', notes: ''}];
     const partLog = [{r: 2, date: add(-1), item: 'Capacitor 35uF', dir: 'OUT', qty: 1, party: 'Pampanga Dental Clinic', ref: '', by: 'Ladie', notes: ''}];
     const D = {ok: true, me: null, sheetUrl: 'https://docs.google.com/spreadsheets/', jobs: ['Install', 'Service (AS)', 'Cleaning', 'Survey', 'Delivery', 'Pull-out', 'Meeting', 'Other'],
-      statuses: ['Scheduled', 'Confirmed', 'Done', 'Moved', 'Cancelled'], methods: ['Cash', 'Bank', 'GCash', 'Check', 'Other'],
+      statuses: ['Scheduled', 'Confirmed', 'Pending', 'Done', 'Moved', 'Cancelled'], methods: ['Cash', 'Bank', 'GCash', 'Check', 'Other'],
       unitRes: [{r: 2, id: 'DEMO-R-1', date: add(-20), item: 'APNQ36GR5A4/AUUQ36GH4', qty: 2, party: 'Blue Lagoon Hotel / New wing', ref: 'PO 1021', status: 'Reserved', by: 'Ladie', notes: ''},
         {r: 3, id: 'DEMO-R-2', date: add(-3), item: 'ZTNQ18GTLA0/ZUAB1', qty: 1, party: 'Golden Star Office', ref: '', status: 'Reserved', by: 'Ladie', notes: 'waiting for LG delivery'}],
       orders: [{r: 2, id: 'DEMO-O-1', status: 'Ordered', po: '2026-07', date: add(-30), supplier: 'LG Electronics Philippines Inc.', kind: 'Unit', item: 'ZTNQ18GTLA0/ZUAB1', qty: 2, got: 0, rate: 61360, for: 'Golden Star Office', notes: ''},
@@ -100,6 +103,7 @@
   }
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const err = m => { throw new Error(m); };
+  const demoPay = (ch, paid, cur) => cur === 'No charge' && !(ch > 0) ? 'No charge' : !(ch > 0) ? '' : (paid || 0) >= ch - 0.005 ? 'Paid' : paid > 0 ? 'Partial' : 'Unpaid';
 
   async function call(a, b, S) {
     await wait(a === 'boot' ? 350 : 250);
@@ -131,12 +135,28 @@
     if (a === 'jobPhoto') { const j = D.schedule.find(x => x.r === b.r); if (j) j.photos = 'https://drive.google.com/'; persist(); return {ok: true}; }
     if (a === 'askRate') { const x = D.ask.find(k => k.id === b.id); if (x) x.rating = b.good ? 'good' : 'bad: ' + (b.why || ''); if (!b.good && x) D.needs.unshift({id: x.id, time: x.time, who: me.name, q: x.q, rating: x.rating, missing: ''}); persist(); return {ok: true}; }
     if (a === 'kHide') { D.know = D.know.filter(k => k.id !== b.id); persist(); return {ok: true}; }
+    if (a === 'jobPay') {
+      const j = D.schedule.find(x => x.r === b.r) || err('Job not found');
+      if (!(+b.amount > 0)) err('Write the amount received'); if (!(j.charge > 0)) err('Set the charge first');
+      j.paid = Math.round(((+j.paid || 0) + +b.amount) * 100) / 100; j.paidDate = b.date; j.pay = demoPay(j.charge, j.paid, '');
+      const add = [b.method, b.ref].filter(Boolean).join(' '); if (add) j.payRef = [j.payRef, add].filter(Boolean).join(' / ');
+      log(me, 'Service payment', j.customer + ' · ₱' + b.amount); persist(); return {ok: true, status: j.pay};
+    }
     if (a === 'addJob') {
-      const j = b.job; if (!j.date || !j.customer) err('Date and customer are needed');
+      const j = Object.assign({}, b.job); if (!j.customer) err('Customer is needed'); if (!j.date && j.status !== 'Pending') err('Date is needed (or choose Pending)');
+      if (j.date === undefined) j.date = '';
+      if (j.charge !== undefined) { j.charge = j.charge === '' ? null : +j.charge; j.pay = demoPay(j.charge, 0, ''); }
       D.schedule.push(Object.assign({r: ++seq, status: 'Scheduled', by: me.name, id: 'DEMO-S-' + seq}, j));
       log(me, 'New job', `${j.date} ${j.time || ''} · ${j.job} · ${j.customer}`);
     } else if (a === 'updateJob') {
-      const j = D.schedule.find(x => x.r === b.r) || err('Job not found'); Object.assign(j, b.set);
+      const j = D.schedule.find(x => x.r === b.r) || err('Job not found'), st = Object.assign({}, b.set);
+      const nd = st.date !== undefined ? st.date : j.date, ns = st.status || j.status;
+      if (!nd && ns !== 'Pending' && ns !== 'Cancelled') err('Choose a date (or keep it Pending)');
+      if (st.charge !== undefined || st.pay) {
+        const ch = st.charge !== undefined ? (st.charge === '' ? null : +st.charge) : j.charge;
+        st.pay = demoPay(ch, j.paid, st.pay ? (st.pay === 'No charge' ? 'No charge' : '') : j.pay); st.charge = ch;
+      }
+      Object.assign(j, st);
       log(me, 'Job updated', j.customer + ' → ' + Object.entries(b.set).map(e => e.join(': ')).join(', '));
     } else if (a === 'stockMove') {
       const m = b.move, L = m.kind === 'part' ? D.partLog : D.unitLog;

@@ -12,12 +12,15 @@
  * AI answers: questions go to tab ASK. Sir Kim's PC (ask_relay.py + Codex/ChatGPT) picks them up with
  *   RELAY_KEY (Script Property, set once by Evan) and writes the answer back. Materials: tab KNOWLEDGE + Drive folder.
  */
-var VERSION = '2.1';
+var VERSION = '2.2';
 var SHEET_ID = '1jahKP1N3VVmiBqSXlr3xbmJxORVAWFVQNtxMLyqbCKE';
 var TZ = 'Asia/Manila';
 var SESSION_DAYS = 90;
 var JOBS = ['Install', 'Service (AS)', 'Cleaning', 'Survey', 'Delivery', 'Pull-out', 'Meeting', 'Other'];
-var STATUSES = ['Scheduled', 'Confirmed', 'Done', 'Moved', 'Cancelled'];
+var STATUSES = ['Scheduled', 'Confirmed', 'Pending', 'Done', 'Moved', 'Cancelled'];  // Pending = waiting (parts etc.), date can be empty
+/** billing for service / cleaning jobs (SOA): new columns at the right end of SCHEDULE */
+var BILL_COLS = ['Charge (청구 금액)', 'Paid (받은 금액)', 'Paid date (입금일)', 'Pay ref (영수증·메모)', 'Payment (수금 상태)'];
+var PAY_ST = ['Unpaid', 'Partial', 'Paid', 'No charge'];
 var METHODS = ['Cash', 'Bank', 'GCash', 'Check', 'Other'];
 var MAIN_FOLDER_ID = '1mzJaWt2sPB2yck9vy4AtkVk0A8NKGzJH';  // BRIZAIR Office (Bot + Sheets)
 var ARCHIVE_FOLDER_ID = '1tuE7gj_2PPsjovROzIKJ25zw9J4aa3w3';  // BRIZAIR Original Excel (2026-11-12), read only
@@ -49,7 +52,7 @@ function doPost(e) {
 }
 
 /** which data sections each save changes (sent back right away) */
-var CHANGES = {addJob: ['schedule', 'log'], updateJob: ['schedule', 'log'], stockMove: ['stock', 'log'], payment: ['money', 'log'],
+var CHANGES = {addJob: ['schedule', 'log'], updateJob: ['schedule', 'log'], jobPay: ['schedule', 'log'], stockMove: ['stock', 'log'], payment: ['money', 'log'],
   newReceivable: ['money', 'log'], cleaningDone: ['customers', 'log'], addInstall: ['customers', 'log'], saveQuote: ['docs', 'log'],
   quoteStatus: ['docs', 'log'], resAdd: ['stock', 'log'], resSet: ['stock', 'log'], recSave: ['stock', 'log'], orderRecv: ['stock', 'log'], addItem: ['stock', 'log'], jobPhoto: ['schedule', 'log'], kNote: ['ask', 'log'], kUpload: ['ask', 'log'], kHide: ['ask', 'log'], askRate: ['ask', 'log']};
 
@@ -58,6 +61,7 @@ var ACTIONS = {
   logout: logout_,
   addJob: addJob_,
   updateJob: updateJob_,
+  jobPay: jobPay_,
   stockMove: stockMove_,
   resAdd: resAdd_,
   resSet: resSet_,
@@ -338,7 +342,9 @@ function boot_(req, me, parts) {
       return {r: i + 1, date: date, time: timeStr_(r[col_(T, 'time')]), job: s_(r[col_(T, 'job')]), customer: cust,
         location: s_(r[col_(T, 'location')]), units: s_(r[col_(T, 'units / model')]), tech: s_(r[col_(T, 'technician')]),
         status: s_(r[col_(T, 'status')]) || 'Scheduled', notes: s_(r[col_(T, 'notes')]), by: s_(r[colOpt_(T, 'added by')]),
-        id: s_(r[colOpt_(T, 'bot record id')]), photos: s_(r[colOpt_(T, 'photos')])};
+        id: s_(r[colOpt_(T, 'bot record id')]), photos: s_(r[colOpt_(T, 'photos')]),
+        charge: n_(r[colOpt_(T, 'charge')]), paid: n_(r[colOpt_(T, 'paid')]), paidDate: d_(r[colOpt_(T, 'paid date')]),
+        payRef: s_(r[colOpt_(T, 'pay ref')]), pay: s_(r[colOpt_(T, 'payment')])};
     });
     tm.schedule = Date.now() - t0;
   }
@@ -662,7 +668,7 @@ function addItem_(req, me) {
 // ───────────────────────── writes ─────────────────────────
 function jobFields_(j) {
   var o = {};
-  if (j.date !== undefined) o['date'] = toDate_(j.date);
+  if (j.date !== undefined) o['date'] = j.date ? toDate_(j.date) : '';
   if (j.time !== undefined) o['time'] = clip_(j.time, 20);
   if (j.job !== undefined) { if (JOBS.indexOf(j.job) < 0) throw bad_('Pick a job type'); o['job'] = j.job; }
   if (j.customer !== undefined) o['customer'] = clip_(j.customer, 120);
@@ -671,21 +677,49 @@ function jobFields_(j) {
   if (j.tech !== undefined) o['technician'] = clip_(j.tech, 80);
   if (j.status !== undefined) { if (STATUSES.indexOf(j.status) < 0) throw bad_('Bad status'); o['status'] = j.status; }
   if (j.notes !== undefined) o['notes'] = clip_(j.notes, 500);
+  if (j.charge !== undefined) { var c = n_(j.charge); if (j.charge !== '' && (c === null || c < 0)) throw bad_('Charge must be a number'); o['charge'] = c === null ? '' : c; }
+  if (j.pay !== undefined && j.pay !== '') { if (j.pay !== 'No charge' && j.pay !== 'Bill') throw bad_('Bad payment status'); o['payment'] = j.pay; }
   return o;
+}
+/** add the billing columns at the right end of SCHEDULE if they are not there yet (existing columns stay) */
+function ensureBillCols_(T) {
+  var miss = BILL_COLS.filter(function (h) { return colOpt_(T, norm_(h)) < 0; });
+  if (!miss.length) return T;
+  var last = T.sh.getLastColumn();
+  T.sh.getRange(1, last + 1, 1, miss.length).setValues([miss]).setFontWeight('bold');
+  T.sh.getRange(2, last + 1, Math.max(1, T.sh.getMaxRows() - 1), miss.length).setNumberFormat('@');
+  var ci = BILL_COLS.map(function (h) { return miss.indexOf(h) >= 0 ? last + 1 + miss.indexOf(h) : -1; });
+  [0, 1].forEach(function (k) { if (ci[k] > 0) T.sh.getRange(2, ci[k], T.sh.getMaxRows() - 1, 1).setNumberFormat('#,##0.00'); });
+  if (ci[2] > 0) T.sh.getRange(2, ci[2], T.sh.getMaxRows() - 1, 1).setNumberFormat('m/d/yyyy');
+  return table_('SCHEDULE');
+}
+/** Unpaid / Partial / Paid from charge and paid; 'No charge' (warranty / free) stays until a charge is set */
+function payStatus_(charge, paid, cur) {
+  if (cur === 'No charge' && !(charge > 0)) return 'No charge';
+  if (!(charge > 0)) return '';
+  paid = paid || 0;
+  return paid >= charge - 0.005 ? 'Paid' : paid > 0 ? 'Partial' : 'Unpaid';
+}
+function lastJobRow_(T) {
+  return Math.max(lastRowOf_(T, col_(T, 'date')), lastRowOf_(T, col_(T, 'customer')), colOpt_(T, 'bot record id') >= 0 ? lastRowOf_(T, colOpt_(T, 'bot record id')) : 1);
 }
 
 function addJob_(req, me) {
   var j = req.job || {};
-  if (!j.date || !j.customer) throw bad_('Date and customer are needed');
+  if (!String(j.customer || '').trim()) throw bad_('Customer is needed');
+  if (!j.date && j.status !== 'Pending') throw bad_('Date is needed (or choose Pending)');
   return withLock_(function () {
     var T = table_('SCHEDULE');
-    var row = lastRowOf_(T, col_(T, 'date')) + 1;
-    var f = jobFields_(j);
+    if (j.charge !== undefined || j.pay) T = ensureBillCols_(T);
+    var row = lastJobRow_(T) + 1;
+    var f = jobFields_(j), id = id_('S');
     if (!f['status']) f['status'] = 'Scheduled';
+    T.sh.getRange(row, col_(T, 'bot record id') + 1).setValue(id);  // id first: a row is never left without its id
+    if (f['charge'] !== undefined || f['payment']) f['payment'] = payStatus_(n_(f['charge']), 0, f['payment'] === 'No charge' ? 'No charge' : '');
     f['added by'] = me.name;
-    f['bot record id'] = id_('S');
+    f['bot record id'] = id;
     writeRow_(T, row, f);
-    done_(me, 'New job', j.date + ' ' + (j.time || '') + ' · ' + (j.job || '') + ' · ' + j.customer + (j.location ? ' · ' + j.location : '') + (j.tech ? ' · ' + j.tech : ''), '📅');
+    done_(me, 'New job', (j.date || 'PENDING (no date)') + ' ' + (j.time || '') + ' · ' + (j.job || '') + ' · ' + j.customer + (j.location ? ' · ' + j.location : '') + (j.tech ? ' · ' + j.tech : ''), '📅');
     return {ok: true, r: row};
   });
 }
@@ -699,11 +733,41 @@ function updateJob_(req, me) {
     var same = (req.id && idc >= 0) ? s_(cur[idc]) === req.id : s_(cur[col_(T, 'customer')]) === String(req.customer || '');
     if (!same) throw bad_('This job was changed by someone else. Please refresh.');
     var before = s_(cur[col_(T, 'status')]);
-    writeRow_(T, r, jobFields_(j));
+    var f = jobFields_(j);
+    var newDate = j.date !== undefined ? j.date : d_(cur[col_(T, 'date')]), newSt = j.status !== undefined ? j.status : (before || 'Scheduled');
+    if (!newDate && newSt !== 'Pending' && newSt !== 'Cancelled') throw bad_('Choose a date (or keep it Pending)');
+    if (j.charge !== undefined || j.pay) {
+      T = ensureBillCols_(T);
+      var ch = f['charge'] !== undefined ? n_(f['charge']) : n_(cur[colOpt_(T, 'charge')]);
+      var keep = j.pay ? (j.pay === 'No charge' ? 'No charge' : '') : s_(cur[colOpt_(T, 'payment')]);
+      f['payment'] = payStatus_(ch, n_(cur[colOpt_(T, 'paid')]), keep);
+    }
+    writeRow_(T, r, f);
     var what = Object.keys(j).map(function (k) { return k + ': ' + j[k]; }).join(', ');
     done_(me, 'Job updated', s_(cur[col_(T, 'customer')]) + ' (' + d_(cur[col_(T, 'date')]) + ') → ' + what,
       j.status === 'Done' ? '✅' : j.status === 'Cancelled' ? '❌' : '✏️');
     return {ok: true, r: r, before: before};
+  });
+}
+
+/** service / cleaning payment received: adds to Paid, sets Paid date, keeps refs (OR #) */
+function jobPay_(req, me) {
+  var r = +req.r, amt = n_(req.amount);
+  if (!(amt > 0)) throw bad_('Write the amount received');
+  return withLock_(function () {
+    var T = ensureBillCols_(table_('SCHEDULE'));
+    if (!(r >= 2 && r <= T.vals.length)) throw bad_('Job not found. Please refresh.');
+    var cur = T.vals[r - 1], idc = colOpt_(T, 'bot record id');
+    if (!(req.id && idc >= 0 && s_(cur[idc]) === req.id)) throw bad_('This job was changed by someone else. Please refresh.');
+    var charge = n_(cur[col_(T, 'charge')]);
+    if (!(charge > 0)) throw bad_('Set the charge first');
+    var paid = Math.round(((n_(cur[col_(T, 'paid')]) || 0) + amt) * 100) / 100;
+    var refOld = s_(cur[col_(T, 'pay ref')]), add = [req.method, req.ref].filter(function (x) { return x; }).join(' ');
+    var o = {'paid': paid, 'paid date': toDate_(req.date || today_()), 'payment': payStatus_(charge, paid, '')};
+    if (add) o['pay ref'] = clip_([refOld, add].filter(function (x) { return x; }).join(' / '), 300);
+    writeRow_(T, r, o);
+    done_(me, 'Service payment', s_(cur[col_(T, 'customer')]) + ' (' + (d_(cur[col_(T, 'date')]) || 'no date') + ') · ₱' + amt + (add ? ' · ' + add : '') + ' → ' + o['payment'], '💵');
+    return {ok: true, r: r, status: o['payment']};
   });
 }
 

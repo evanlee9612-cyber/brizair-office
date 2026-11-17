@@ -198,7 +198,7 @@
   // ───────── shell ─────────
   const NAV = [
     ['home', 'Home', 'home'], ['ask', 'Ask GPT', 'chat'], ['schedule', 'Schedule', 'cal'], ['stock', 'Stock', 'box'], ['orders', 'Orders (PO)', 'inbox'], ['customers', 'Customers', 'users'],
-    ['money', 'Money', 'peso'], ['materials', 'Materials for AI', 'book'], ['quotes', 'Quotes & Invoices', 'doc'], ['report', 'LG Monthly Report', 'chart'], ['activity', 'Activity', 'log'], ['requests', 'Ask for a change', 'help']
+    ['money', 'Money', 'peso'], ['soa', 'Service SOA', 'doc'], ['materials', 'Materials for AI', 'book'], ['quotes', 'Quotes & Invoices', 'doc'], ['report', 'LG Monthly Report', 'chart'], ['activity', 'Activity', 'log'], ['requests', 'Ask for a change', 'help']
   ];
   function shell() {
     document.body.innerHTML = `
@@ -242,7 +242,7 @@
     S.route = name;
     document.body.dataset.route = name;
     const tabFor = {cust: 'customers', materials: 'ask'}[name] || name;
-    $$('.me').forEach(b => b.classList.toggle('on', ['more', 'money', 'quotes', 'quote', 'report', 'activity', 'help', 'orders', 'requests'].includes(name)));
+    $$('.me').forEach(b => b.classList.toggle('on', ['more', 'money', 'soa', 'quotes', 'quote', 'report', 'activity', 'help', 'orders', 'requests'].includes(name)));
     $$('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.go === tabFor));
     $$('.side button[data-go]').forEach(b => b.classList.toggle('on', b.dataset.go === ({cust: 'customers', quote: 'quotes'}[name] || name)));
     const main = $('#main');
@@ -260,6 +260,13 @@
   function jobsOn(iso) {
     return (D().schedule || []).filter(j => j.date === iso).sort((a, b) => timeSort(a.time) - timeSort(b.time));
   }
+  /** service / cleaning billing (SOA) */
+  const isSvc = j => /^(service|cleaning)/i.test(j.job || '');
+  const jBal = j => Math.round(((+j.charge || 0) - (+j.paid || 0)) * 100) / 100;
+  const jPay = j => j.pay || (j.charge > 0 ? (jBal(j) <= 0 ? 'Paid' : j.paid > 0 ? 'Partial' : 'Unpaid') : '');
+  const pendingJobs = () => (D().schedule || []).filter(j => j.status === 'Pending').sort((a, b) => (a.date || '9').localeCompare(b.date || '9') || b.r - a.r);
+  const svcUnpaid = () => (D().schedule || []).filter(j => j.charge > 0 && jBal(j) > 0 && j.status !== 'Cancelled');
+  const svcNotBilled = () => (D().schedule || []).filter(j => isSvc(j) && j.status === 'Done' && !(j.charge > 0) && j.pay !== 'No charge');
   function custGroups() {
     const m = new Map();
     (D().customers || []).forEach(c => {
@@ -322,6 +329,10 @@
         if (seen.has(c.c) || seen.size >= 4) return; seen.add(c.c);
         out.push({icon: 'spark', cls: 'c-violet', t: 'Book cleaning: ' + c.c, s: [c.l, c.m, 'due ' + fmtD(c.nc)].filter(Boolean).join(' · '), act: `data-act="bookClean" data-cust="${esc(c.c)}"`});
       });
+    const pj = pendingJobs();
+    if (pj.length) out.push({icon: 'wrench', cls: 'c-amber', t: 'Pending jobs (no date yet): ' + pj.length, s: pj.slice(0, 3).map(j => j.customer).join(' · '), act: 'data-act="pendList"'});
+    const nb = svcNotBilled();
+    if (nb.length) out.push({icon: 'peso', cls: 'c-teal', t: 'Service / cleaning not billed yet: ' + nb.length, s: 'Set the charge (or No charge) → Service SOA', act: 'data-act="soaTab" data-t="nb"'});
     if (S.me && S.me.role === 'owner' && (D().needs || []).length)
       out.push({icon: 'book', cls: 'c-teal', t: 'GPT needs information (' + D().needs.length + ')', s: 'Questions GPT could not answer well', act: 'data-go="materials"'});
     return out;
@@ -355,11 +366,11 @@
     const k = jobKey(j.job);
     return `<button class="item" data-act="job" data-r="${j.r}">
       <span class="jbar bar-${k}"></span>
-      <span class="time">${showDate ? esc(fmtD(j.date)) + '<br>' : ''}${esc(j.time || '—')}</span>
+      <span class="time">${!j.date ? '<b>No date</b><br>' : showDate ? esc(fmtD(j.date)) + '<br>' : ''}${esc(j.time || '—')}</span>
       <span class="grow"><span class="jt j-${k}">${esc(j.job || 'Job')}</span>${j.photos ? ` <span class="muted" title="Photos">📷</span>` : ''}
         <div class="t clip">${esc(j.customer)}</div>
         <div class="s clip">${esc([j.location, j.units, j.tech].filter(Boolean).join(' · '))}</div></span>
-      <span class="r"><span class="pill p-${esc(j.status)}">${esc(j.status)}</span></span>
+      <span class="r"><span class="pill p-${esc(j.status)}">${esc(j.status)}</span>${j.charge > 0 ? `<div class="small num" style="margin-top:3px">${jBal(j) > 0 ? peso(jBal(j), 0) + ' due' : '✓ paid'}</div>` : ''}</span>
     </button>`;
   }
 
@@ -431,15 +442,18 @@
         ${js.slice(0, 3).map(j => `<span class="ev bar-${jobKey(j.job)} ${j.status === 'Cancelled' || j.status === 'Done' ? 'dim' : ''}">${esc(j.time ? j.time.replace(/\s?([AP])M/i, '$1').toLowerCase() + ' ' : '')}${esc(j.customer)}</span>`).join('')}
         ${js.length > 3 ? `<span class="more">+${js.length - 3} more</span>` : ''}</button>`;
     }
-    const sel = jobsOn(S.calSel);
+    const sel = jobsOn(S.calSel), pend = pendingJobs();
     const upcoming = (D().schedule || []).filter(j => j.date >= t).sort((a, b) => a.date.localeCompare(b.date) || timeSort(a.time) - timeSort(b.time));
-    const recent = (D().schedule || []).filter(j => j.date < t).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 15);
+    const recent = (D().schedule || []).filter(j => j.date && j.date < t).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 15);
     return `
       <div class="row between wrap" style="margin-bottom:12px">
-        <div class="seg"><button class="${S.calMode === 'cal' ? 'on' : ''}" data-act="calMode" data-m="cal">Calendar</button><button class="${S.calMode === 'list' ? 'on' : ''}" data-act="calMode" data-m="list">List</button></div>
-        <button class="btn primary sm" data-act="newJob" data-date="${S.calMode === 'cal' ? S.calSel : t}">${ic('plus')} New job</button>
+        <div class="seg"><button class="${S.calMode === 'cal' ? 'on' : ''}" data-act="calMode" data-m="cal">Calendar</button><button class="${S.calMode === 'list' ? 'on' : ''}" data-act="calMode" data-m="list">List</button><button class="${S.calMode === 'pending' ? 'on' : ''}" data-act="calMode" data-m="pending">Pending${pend.length ? ' (' + pend.length + ')' : ''}</button></div>
+        ${S.calMode === 'pending' ? `<button class="btn primary sm" data-act="newJob" data-pending="1">${ic('plus')} New pending job</button>` : `<button class="btn primary sm" data-act="newJob" data-date="${S.calMode === 'cal' ? S.calSel : t}">${ic('plus')} New job</button>`}
       </div>
-      ${S.calMode === 'cal' ? `
+      ${S.calMode === 'pending' ? `<div class="card"><div class="card-h"><h2>Pending — no date yet</h2><span class="muted small">${pend.length}</span></div>
+        <div class="list">${pend.map(j => jobRow(j, true)).join('') || '<div class="empty">No pending jobs 🎉</div>'}</div></div>
+        <p class="muted small mt">Pending = waiting (parts, customer, approval). Open a job → “Set the date” when you know the day. It moves to the calendar as Scheduled.</p>`
+      : S.calMode === 'cal' ? `
       <div class="cal-h"><h1>${esc(title)}</h1>
         <button class="iconbtn" data-act="calNav" data-n="-1" aria-label="Previous month">${ic('left')}</button>
         <button class="btn sm" data-act="calToday">Today</button>
@@ -780,6 +794,62 @@
     return `<div class="item"><span class="grow"><div class="t clip">${esc(x.name)}</div><div class="s clip">${esc([x.due ? 'Due ' + x.due : '', x.status === 'Paid' && x.paid ? 'Paid ' + fmtD(x.paid, {year: 'numeric'}) : '', x.notes].filter(Boolean).join(' · '))}</div></span>
       <span class="r"><div class="num" style="font-weight:800">${peso(x.amount)}</div>${x.status === 'Paid' ? '<span class="pill p-PAID">PAID</span>' : `<button class="btn sm" data-act="apPaid" data-r="${x.r}">Paid</button>`}</span></div>`;
   }
+  // Service SOA: service & cleaning jobs with a charge (SCHEDULE columns Charge / Paid / Paid date / Pay ref / Payment)
+  function svcGroups(list) {
+    const m = new Map();
+    list.forEach(j => { const k = j.customer || '(no name)'; if (!m.has(k)) m.set(k, []); m.get(k).push(j); });
+    return Array.from(m.entries()).map(([name, js]) => ({name, js: js.sort((a, b) => (a.date || '').localeCompare(b.date || '')), bal: js.reduce((s, j) => s + jBal(j), 0)}));
+  }
+  function svcRow(j) {
+    const st = jPay(j);
+    return `<button class="item" data-act="job" data-r="${j.r}"><span class="grow"><div class="t clip">${esc(j.date ? fmtD(j.date, {year: 'numeric'}) : 'No date')} · ${esc(j.job || 'Job')}</div>
+      <div class="s clip">${esc([j.location, j.units, j.payRef].filter(Boolean).join(' · '))}</div></span>
+      <span class="r">${j.charge > 0 ? `<div class="num" style="font-weight:800">${peso(jBal(j) > 0 ? jBal(j) : j.charge)}</div>` : ''}${st ? `<span class="pill p-${esc(st.replace(/\s/g, ''))}">${esc(st)}</span>` : '<span class="pill p-Moved">Set charge</span>'}</span></button>`;
+  }
+  VIEWS.soa = () => {
+    const tab = S.soaTab || 'unpaid', all = D().schedule || [];
+    const unpaid = svcUnpaid(), nb = svcNotBilled();
+    const paid = all.filter(j => j.charge > 0 && jBal(j) <= 0).sort((a, b) => (b.paidDate || '').localeCompare(a.paidDate || '')).slice(0, 60);
+    const tot = unpaid.reduce((s, j) => s + jBal(j), 0), groups = svcGroups(unpaid).sort((a, b) => b.bal - a.bal);
+    const T = [['unpaid', 'Unpaid' + (unpaid.length ? ' (' + unpaid.length + ')' : '')], ['nb', 'Not billed' + (nb.length ? ' (' + nb.length + ')' : '')], ['paid', 'Paid']];
+    return `
+      <div class="row between wrap" style="margin-bottom:12px"><h1 style="margin:0">Service SOA</h1>
+        <div class="row wrap"><button class="btn sm" data-act="soaList">${ic('print')} Collection list</button><button class="btn sm" data-go="money">${ic('peso')} Money</button></div></div>
+      <div class="stats" style="grid-template-columns:1fr 1fr 1fr">
+        <button class="stat" data-act="soaTab" data-t="unpaid"><span>Total to collect</span><b style="font-size:18px">${peso(tot, 0)}</b></button>
+        <button class="stat" data-act="soaTab" data-t="unpaid"><span>Customers</span><b>${groups.length}</b></button>
+        <button class="stat" data-act="soaTab" data-t="nb"><span>Not billed yet</span><b>${nb.length}</b></button>
+      </div>
+      <div class="seg" style="margin-bottom:12px">${T.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="soaTab" data-t="${t[0]}">${t[1]}</button>`).join('')}</div>
+      ${tab === 'unpaid' ? (groups.map(g => `<div class="card"><div class="card-h"><h2 class="clip">${esc(g.name)}</h2><span class="row"><b class="num">${peso(g.bal)}</b>
+          <button class="btn sm" data-act="soaCust" data-cust="${esc(g.name)}">${ic('print')} SOA</button></span></div>
+          <div class="list">${g.js.map(svcRow).join('')}</div></div>`).join('') || '<div class="card"><div class="empty">Nothing to collect 🎉</div></div>') : ''}
+      ${tab === 'nb' ? `<div class="card"><div class="card-h"><h2>Done, but no charge yet</h2></div><div class="list">${nb.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(svcRow).join('') || '<div class="empty">All service / cleaning jobs are billed ✓</div>'}</div></div>` : ''}
+      ${tab === 'paid' ? `<div class="card"><div class="list">${paid.map(svcRow).join('') || '<div class="empty">—</div>'}</div></div>` : ''}
+      <p class="muted small mt">How to use: open a service / cleaning job → “Set charge” (or “No charge” for warranty). When the customer pays → “Payment received”. “SOA” prints the statement for one customer, “Collection list” prints all unpaid.</p>`;
+  };
+  function svcSoaDoc(name) {
+    const js = (D().schedule || []).filter(j => lc(j.customer) === lc(name) && j.charge > 0 && jBal(j) > 0 && j.status !== 'Cancelled').sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const tot = js.reduce((s, j) => s + jBal(j), 0);
+    const work = j => (String(j.notes || '').match(/Work Done:\s*([^/]+)/i) || [])[1] || '';
+    return `<div class="doc">${letterhead()}<h3>STATEMENT OF ACCOUNT — ACU SERVICES & CLEANING</h3>
+      <table class="noline" style="margin-bottom:10px"><tr><td><b>To:</b> ${esc(name)}</td><td class="r"><b>Date:</b> ${esc(fmtMDY(today()))}</td></tr></table>
+      <table><thead><tr><th>Date</th><th>Service</th><th>Location / Units</th><th>Work done</th><th class="r">Amount</th><th class="r">Paid</th><th class="r">Balance</th></tr></thead>
+      <tbody>${js.map(j => `<tr><td>${esc(fmtMDY(j.date))}</td><td>${esc(j.job)}</td><td>${esc([j.location, j.units].filter(Boolean).join(' · '))}</td><td>${esc(work(j).trim())}</td>
+        <td class="r">${money(j.charge)}</td><td class="r">${j.paid ? money(j.paid) : ''}</td><td class="r">${money(jBal(j))}</td></tr>`).join('')}
+        <tr><td colspan="6" class="r"><b>TOTAL BALANCE DUE (PHP)</b></td><td class="r"><b>${money(tot)}</b></td></tr></tbody></table>
+      <p style="margin-top:14px">Kindly settle the balance at your earliest convenience. Thank you for your business.</p>
+      <div class="sig" style="grid-template-columns:1fr 1fr"><div>Prepared by<br><b>${esc(S.me ? S.me.name : '')}</b></div><div>Received by (customer)</div></div></div>`;
+  }
+  function svcListDoc() {
+    const js = svcUnpaid().sort((a, b) => lc(a.customer).localeCompare(lc(b.customer)) || (a.date || '').localeCompare(b.date || ''));
+    const tot = js.reduce((s, j) => s + jBal(j), 0);
+    return `<div class="doc wide">${letterhead()}<h3>ACU SERVICES & CLEANING — FOR COLLECTION — As of ${esc(fmtMDY(today()))}</h3>
+      <table><thead><tr><th>Service date</th><th>Customer</th><th>Service</th><th>Location</th><th class="r">Amount</th><th>Payment date</th><th class="r">Amount paid</th><th class="r">Balance</th><th>Remarks</th></tr></thead>
+      <tbody>${js.map(j => `<tr><td>${esc(fmtMDY(j.date))}</td><td>${esc(j.customer)}</td><td>${esc(j.job)}</td><td>${esc(j.location)}</td><td class="r">${money(j.charge)}</td>
+        <td>${esc(fmtMDY(j.paidDate))}</td><td class="r">${j.paid ? money(j.paid) : ''}</td><td class="r"><b>${money(jBal(j))}</b></td><td>${esc(j.payRef)}</td></tr>`).join('')}
+        <tr><td colspan="7" class="r"><b>TOTAL</b></td><td class="r"><b>${money(tot)}</b></td><td></td></tr></tbody></table></div>`;
+  }
   VIEWS.money = () => {
     const recs = (D().receivables || []).slice().sort((a, b) => b.bal - a.bal);
     const open = recs.filter(r => r.bal > 0), paid = recs.filter(r => r.bal <= 0);
@@ -790,7 +860,7 @@
     const T = [['ar', 'Unpaid'], ['pay', 'Payments'], ['ap', 'Payables'], ['cash', 'Cash'], ['paid', 'Paid']];
     return `
       <div class="row between wrap" style="margin-bottom:12px"><h1 style="margin:0">Money</h1>
-        <div class="row wrap"><button class="btn sm" data-act="arReport">${ic('print')} AR report</button><button class="btn sm" data-act="newAr">${ic('plus')} New contract</button><button class="btn primary sm" data-act="pay">${ic('peso')} Payment received</button></div></div>
+        <div class="row wrap"><button class="btn sm" data-go="soa">${ic('doc')} Service SOA</button><button class="btn sm" data-act="arReport">${ic('print')} AR report</button><button class="btn sm" data-act="newAr">${ic('plus')} New contract</button><button class="btn primary sm" data-act="pay">${ic('peso')} Payment received</button></div></div>
       <div class="stats" style="grid-template-columns:1fr 1fr 1fr">
         <button class="stat" data-act="moneyTab" data-t="ar"><span>Total unpaid</span><b style="font-size:18px">${peso(total, 0)}</b></button>
         <button class="stat" data-act="moneyTab" data-t="ap"><span>We must pay</span><b style="font-size:18px">${peso(apTot, 0)}</b></button>
@@ -1084,7 +1154,7 @@
 
   VIEWS.more = () => `<h1>More</h1><p class="sub">Logged in as <b>${esc(S.me && S.me.name)}</b></p>
     <div class="card"><div class="list">
-      ${[['ask', 'Ask GPT', 'chat', 'c-blue'], ['materials', 'Materials for AI (upload)', 'book', 'c-violet'], ['orders', 'Orders (PO) & suppliers', 'inbox', 'c-teal'], ['money', 'Money — unpaid & payments', 'peso', 'c-amber'], ['quotes', 'Quotes, invoices & forms', 'doc', 'c-red'], ['report', 'LG Monthly Report', 'chart', 'c-green'], ['activity', 'Activity', 'log', 'c-blue'], ['requests', '💡 Ask for a change / report a problem', 'help', 'c-amber'], ['help', 'Help', 'help', 'c-violet']]
+      ${[['ask', 'Ask GPT', 'chat', 'c-blue'], ['materials', 'Materials for AI (upload)', 'book', 'c-violet'], ['orders', 'Orders (PO) & suppliers', 'inbox', 'c-teal'], ['money', 'Money — unpaid & payments', 'peso', 'c-amber'], ['soa', 'Service SOA — service & cleaning collection', 'doc', 'c-teal'], ['quotes', 'Quotes, invoices & forms', 'doc', 'c-red'], ['report', 'LG Monthly Report', 'chart', 'c-green'], ['activity', 'Activity', 'log', 'c-blue'], ['requests', '💡 Ask for a change / report a problem', 'help', 'c-amber'], ['help', 'Help', 'help', 'c-violet']]
         .map(x => `<button class="item" data-go="${x[0]}"><span class="qi ${x[3]}" style="width:38px;height:38px">${ic(x[2])}</span><span class="grow t">${x[1]}</span>${ic('right')}</button>`).join('')}
       <button class="item" data-act="lang"><span class="qi c-blue" style="width:38px;height:38px"><b class="noi18n">A/가</b></span><span class="grow t">Language</span><span class="muted small noi18n">${lang() === 'ko' ? '한국어 → English' : 'English → 한국어'}</span></button>
       <button class="item" data-act="openSheet"><span class="qi c-teal" style="width:38px;height:38px">${ic('sheet')}</span><span class="grow t">Open Google Sheet</span>${ic('right')}</button>
@@ -1230,11 +1300,13 @@
     j = j || {};
     preset = preset || {};
     const jobs = D().jobs || ['Install', 'Service (AS)', 'Cleaning', 'Survey', 'Delivery', 'Pull-out', 'Meeting', 'Other'];
+    const pend = j.r ? j.status === 'Pending' : !!preset.pending;
     return `<form id="fjob">
-      <div class="f2">${field('Date *', `<input type="date" name="date" required value="${esc(j.date || preset.date || today())}">`)}
+      <label class="row pendbox"><input type="checkbox" name="pending" value="1" ${pend ? 'checked' : ''}> <span><b>Pending — no date yet</b><br><span class="muted small">Waiting for parts / customer. Set the date later.</span></span></label>
+      <div class="f2">${field('Date' + (pend ? '' : ' *'), `<input type="date" name="date" value="${esc(j.r ? (j.date || '') : pend ? '' : (preset.date || today()))}">`)}
         ${field('Time', `<input name="time" placeholder="e.g. 9:00 AM" value="${esc(j.time || '')}" list="dltime">`)}</div>
       ${dl('dltime', ['8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM'])}
-      ${field('Job *', choice('job', jobs, j.job || preset.job || 'Install'))}
+      ${field('Job *', choice('job', jobs, j.job || preset.job || (pend ? 'Service (AS)' : 'Install')))}
       ${field('Customer *', `<input name="customer" required list="dlcust" autocomplete="off" value="${esc(j.customer || preset.cust || '')}" placeholder="Customer name">`)}
       ${dl('dlcust', custNames())}
       ${j.r ? '' : field('Complain / request', `<input name="comp" list="dlcomp0" placeholder="e.g. Water leaking, Not cooling, Cleaning">`, 'Saved in Notes as “Complain: …”. You can leave it empty.') + dl('dlcomp0', ['Cleaning', 'Water Leaking', 'Not Cooling', 'Not Working', 'Noisy', 'Error code'])}
@@ -1242,8 +1314,18 @@
       ${field('Units / model', `<input name="units" value="${esc(j.units || '')}" placeholder="e.g. 2 × HSN12ISB 1.5hp">`)}
       ${field('Technician', `<input name="tech" list="dltech" value="${esc(j.tech || '')}">`)}${dl('dltech', techs())}
       ${field('Notes', `<textarea name="notes" placeholder="Contact person, special request…">${esc(j.notes || '')}</textarea>`)}
+      ${field('Charge to customer (₱)', `<input name="charge" inputmode="decimal" placeholder="e.g. 1500" value="${esc(j.charge > 0 ? j.charge : '')}">`, 'For service / cleaning SOA. You can leave it empty and add it later.')}
     </form>`;
   }
+  /** Pending tick ↔ date box */
+  function bindJobForm(v) {
+    const cb = $('input[name=pending]', v), dt = $('input[name=date]', v);
+    if (!cb || !dt) return;
+    const lab = () => { const l = dt.closest('.f') && $('label', dt.closest('.f')); if (l) l.textContent = tr(cb.checked ? 'Date' : 'Date *'); };
+    cb.addEventListener('change', () => { if (cb.checked) dt.value = ''; else if (!dt.value) dt.value = S.editJob && S.editJob.date ? S.editJob.date : today(); lab(); });
+    dt.addEventListener('change', () => { if (dt.value && cb.checked && !(S.editJob && S.editJob.status === 'Pending' && S.editJob.date)) { cb.checked = false; lab(); } });
+  }
+  const chargeVal = v => { const s = String(v || '').replace(/[₱,\s]/g, ''); return s === '' ? '' : (isNaN(+s) || +s < 0 ? null : String(+s)); };
   const formData = id => { const o = {}; new FormData($(id)).forEach((v, k) => { o[k] = String(v).trim(); }); return o; };
 
   function moveForm(kind, item, dir) {
@@ -1309,16 +1391,18 @@
     const k = jobKey(j.job);
     openSheet(j.customer, `
       <div class="row" style="margin-bottom:12px"><span class="jt j-${k}">${esc(j.job)}</span><span class="pill p-${esc(j.status)}">${esc(j.status)}</span></div>
-      <dl class="kv"><dt>When</dt><dd>${esc(fmtLong(j.date))}${j.time ? ' · ' + esc(j.time) : ''}</dd>
+      <dl class="kv"><dt>When</dt><dd>${j.date ? esc(fmtLong(j.date)) : `<b>${esc(tr('No date yet (Pending)'))}</b>`}${j.time ? ' · ' + esc(j.time) : ''}</dd>
         ${j.location ? `<dt>Location</dt><dd>${esc(j.location)}</dd>` : ''}${j.units ? `<dt>Units</dt><dd>${esc(j.units)}</dd>` : ''}
         ${j.tech ? `<dt>Technician</dt><dd>${esc(j.tech)}</dd>` : ''}${j.notes ? `<dt>Notes</dt><dd>${esc(j.notes)}</dd>` : ''}${j.by ? `<dt>Added by</dt><dd>${esc(j.by)}</dd>` : ''}</dl>
       <div class="f"><label>Change status</label><div class="choice">${(D().statuses || ['Scheduled', 'Confirmed', 'Done', 'Moved', 'Cancelled']).map(s => `<label><input type="radio" name="st" value="${s}" ${s === j.status ? 'checked' : ''} data-act="jobStatus" data-r="${j.r}"><span>${s === 'Done' ? '✅ ' : s === 'Cancelled' ? '✖ ' : ''}${s}</span></label>`).join('')}</div></div>
+      ${j.status === 'Pending' ? `<div class="btns" style="margin-bottom:12px"><button class="btn primary" data-act="jobEdit" data-r="${j.r}">📅 Set the date</button></div>` : ''}
+      ${billHtml(j)}
       <div class="f"><label>Photos</label><div class="btns">
         <label class="btn" style="cursor:pointer">${ic('camera')} Add photos<input type="file" accept="image/*" multiple hidden data-photo="${j.r}"></label>
         ${j.photos ? `<a class="btn" href="${esc(j.photos)}" target="_blank" rel="noopener">${ic('sheet')} Open photos</a>` : ''}</div>
         <div class="hint" id="photoMsg">Photos are saved in Google Drive, one folder per job.</div></div>
       <div class="btns">${j.status !== 'Done' ? `<button class="btn primary" data-act="jobDoneOpen" data-r="${j.r}">✅ Done + work done</button>` : ''}
-        ${j.status !== 'Done' && j.status !== 'Cancelled' ? `<button class="btn" data-act="jobMoveOpen" data-r="${j.r}">📅 Move to another day</button>` : ''}
+        ${j.status !== 'Done' && j.status !== 'Cancelled' && j.status !== 'Pending' ? `<button class="btn" data-act="jobMoveOpen" data-r="${j.r}">📅 Move to another day</button>` : ''}
         <button class="btn" data-act="jobEdit" data-r="${j.r}">${ic('edit')} Edit</button>
         ${j.location ? `<a class="btn" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.location)}" target="_blank" rel="noopener">${ic('pin')} Map</a>` : ''}
         <button class="btn" data-act="quoteFor" data-cust="${esc(j.customer)}">${ic('doc')} Quotation</button>
@@ -1327,6 +1411,17 @@
         <button class="btn" data-go="cust/${encodeURIComponent(j.customer)}">${ic('users')} Customer</button></div>`);
   }
 
+  function billHtml(j) {
+    if (!isSvc(j) && !(j.charge > 0) && !j.pay) return '';
+    const st = jPay(j), bal = jBal(j);
+    return `<div class="f"><label>Billing (Service SOA)</label>
+      ${j.charge > 0 ? `<dl class="kv"><dt>Charge</dt><dd>${peso(j.charge)}</dd><dt>Paid</dt><dd>${peso(j.paid || 0)}${j.paidDate ? ' · ' + esc(fmtD(j.paidDate, {year: 'numeric'})) : ''}</dd>
+        <dt>Balance</dt><dd class="big">${peso(bal)}</dd>${j.payRef ? `<dt>Ref</dt><dd>${esc(j.payRef)}</dd>` : ''}</dl>` : `<p class="small" style="margin:0 0 8px">${st === 'No charge' ? '✓ No charge (warranty / free)' : 'No charge set yet.'}</p>`}
+      <div class="btns">${st ? `<span class="pill p-${esc(st.replace(/\s/g, ''))}">${esc(st)}</span>` : ''}
+        <button class="btn sm" data-act="jobChargeOpen" data-r="${j.r}">${ic('edit')} ${j.charge > 0 ? 'Change charge' : 'Set charge'}</button>
+        ${j.charge > 0 && bal > 0 ? `<button class="btn primary sm" data-act="jobPayOpen" data-r="${j.r}">${ic('peso')} Payment received</button>` : ''}
+        ${j.charge > 0 ? `<button class="btn sm" data-act="soaCust" data-cust="${esc(j.customer)}">${ic('print')} SOA</button>` : ''}</div></div>`;
+  }
   const addNote = (old, add) => [String(old || '').trim(), add].filter(Boolean).join(' / ');
   /** Done → "Complain / Work Done" like Ladie writes it; Cleaning jobs can also mark the customer's units cleaned */
   const normName = x => lc(String(x || '')).replace(/[’'`.]/g, '').replace(/\b(restaurant|corp|corporation|inc|co|ltd|mr|ms|mrs|sir|the|and|of|philippines)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -1353,9 +1448,10 @@
     const isClean = /clean/i.test(j.job || '');
     const guess = isClean ? guessCustomer(j.customer) : '';
     openSheet('Job done', `<form id="fdone">
-      <p class="small" style="margin:0 0 10px">${esc(j.customer)} · ${esc(fmtLong(j.date))}${j.job ? ' · ' + esc(j.job) : ''}</p>
+      <p class="small" style="margin:0 0 10px">${esc(j.customer)} · ${esc(j.date ? fmtLong(j.date) : fmtLong(today()))}${j.job ? ' · ' + esc(j.job) : ''}</p>
       ${/complain|request/i.test(j.notes || '') ? '' : field('Complain / request', `<input name="comp" list="dlcomp" placeholder="e.g. Water leaking, Not cooling, Cleaning">`) + dl('dlcomp', ['Cleaning', 'Water Leaking', 'Not Cooling', 'Not Working', 'Noisy', 'Error code'])}
       ${field('Work done', `<textarea name="work" placeholder="e.g. General cleaning 3 units ceiling suspended · Flush out drain"></textarea>`, 'Saved in Notes as “Complain: … / Work Done: …”. You can leave it empty.')}
+      ${isSvc(j) && !(j.charge > 0) ? field('Charge to customer (₱)', `<input name="charge" inputmode="decimal" placeholder="e.g. 1500 (empty = later)">`, 'Goes to Service SOA (unpaid list). Leave empty if you don’t know yet.') : ''}
       ${isClean ? `<div class="f"><label>Units cleaned (sets the next cleaning date)</label>
         <input id="cu_cust" list="dlcust4" autocomplete="off" value="${esc(guess)}" placeholder="Customer in the customer list">${dl('dlcust4', custNames())}
         <div id="cu_list" style="margin-top:8px">${cleanUnitsHtml(guess)}</div></div>` : ''}
@@ -1578,21 +1674,28 @@
         `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveJob">Save job</button>`);
     },
     goInvoice: () => { closeSheet(); go('quote/newinv'); },
-    newJob: el => openSheet('New job', jobForm(null, {date: el.dataset.date, cust: el.dataset.cust}),
-      `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveJob">Save job</button>`),
+    newJob: el => { S.editJob = null; openSheet('New job', jobForm(null, {date: el.dataset.date, cust: el.dataset.cust, pending: el.dataset.pending}),
+      `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveJob">Save job</button>`, bindJobForm); },
+    pendList: () => { S.calMode = 'pending'; LS.set('brz_calmode', 'pending'); go('schedule'); },
     saveJob: async el => {
-      const f = formData('#fjob');
-      if (!f.date || !f.customer) return toast('Date and customer are needed', true);
+      const f = formData('#fjob'), pend = !!f.pending;
+      delete f.pending;
+      if (!f.customer) return toast('Customer is needed', true);
+      if (!f.date && !pend) return toast('Choose the date, or tick “Pending — no date yet”', true);
+      if (pend) f.status = 'Pending';
+      const c = chargeVal(f.charge); if (c === null) return toast('Charge must be a number', true);
+      if (c === '') delete f.charge; else f.charge = c;
       if (f.comp) f.notes = addNote(/^request|cleaning$/i.test(f.comp) ? 'Request: ' + f.comp : 'Complain: ' + f.comp, f.notes);
       delete f.comp;
       el.disabled = true;
-      try { await save('addJob', {job: f}, 'Job added ✓'); S.calSel = f.date; S.calYM = f.date.slice(0, 7); } catch (e) { el.disabled = false; }
+      try { await save('addJob', {job: f}, pend ? 'Saved in Pending ✓' : 'Job added ✓'); if (f.date) { S.calSel = f.date; S.calYM = f.date.slice(0, 7); } } catch (e) { el.disabled = false; }
     },
     job: el => { const j = (D().schedule || []).find(x => x.r === +el.dataset.r); if (j) jobSheet(j); },
     jobStatus: async el => {
       const j = (D().schedule || []).find(x => x.r === +el.dataset.r); if (!j || el.value === j.status) return;
       if (el.value === 'Done') return jobDoneSheet(j);
       if (el.value === 'Moved') return jobMoveSheet(j);
+      if (!j.date && el.value !== 'Pending' && el.value !== 'Cancelled') { toast('Choose the date first', true); return ACT.jobEdit({dataset: {r: j.r}}); }
       try { await save('updateJob', {r: j.r, id: j.id, customer: j.customer, set: {status: el.value}}, j.customer + ' → ' + el.value); } catch (e) { }
     },
     jobDoneOpen: el => { const j = (D().schedule || []).find(x => x.r === +el.dataset.r); if (j) jobDoneSheet(j); },
@@ -1601,6 +1704,8 @@
     saveJobDone: async el => {
       const j = S.doneJob, f = formData('#fdone');
       const set = {status: 'Done'};
+      if (!j.date) set.date = today();
+      if (f.charge !== undefined && f.charge !== '') { const c = chargeVal(f.charge); if (c === null) return toast('Charge must be a number', true); set.charge = c; }
       const add = [f.comp ? 'Complain: ' + f.comp : '', f.work ? 'Work Done: ' + f.work : ''].filter(Boolean).join(' / ');
       if (add) set.notes = addNote(j.notes, add);
       const ids = $$('#fdone input[name=cu]:checked').map(x => +x.value);
@@ -1637,15 +1742,59 @@
     jobEdit: el => {
       const j = (D().schedule || []).find(x => x.r === +el.dataset.r); if (!j) return;
       S.editJob = j;
-      openSheet('Edit job', jobForm(j), `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveEdit">Save</button>`);
+      openSheet(j.status === 'Pending' ? 'Pending job — set the date' : 'Edit job', jobForm(j), `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveEdit">Save</button>`, bindJobForm);
     },
     saveEdit: async el => {
-      const j = S.editJob, f = formData('#fjob'), set = {};
+      const j = S.editJob, f = formData('#fjob'), set = {}, pend = !!f.pending;
       ['date', 'time', 'job', 'customer', 'location', 'units', 'tech', 'notes'].forEach(k => { if ((f[k] || '') !== (j[k] || '')) set[k] = f[k] || ''; });
+      const c = chargeVal(f.charge); if (c === null) return toast('Charge must be a number', true);
+      if (c !== (j.charge > 0 ? String(+j.charge) : '')) set.charge = c;
+      if (!pend && !f.date) return toast('Choose the date, or tick “Pending — no date yet”', true);
+      if (pend && j.status !== 'Pending') set.status = 'Pending';
+      if (!pend && j.status === 'Pending') set.status = 'Scheduled';
       if (!Object.keys(set).length) return closeSheet();
       el.disabled = true;
-      try { await save('updateJob', {r: j.r, id: j.id, customer: j.customer, set}, 'Job updated ✓'); } catch (e) { el.disabled = false; }
+      try { await save('updateJob', {r: j.r, id: j.id, customer: j.customer, set}, set.status === 'Scheduled' ? 'Scheduled on ' + fmtD(f.date) + ' ✓' : 'Job updated ✓'); if (set.status === 'Scheduled' && f.date) { S.calSel = f.date; S.calYM = f.date.slice(0, 7); } } catch (e) { el.disabled = false; }
     },
+    jobChargeOpen: el => {
+      const j = (D().schedule || []).find(x => x.r === +el.dataset.r); if (!j) return;
+      S.billJob = j;
+      openSheet('Charge — ' + j.customer, `<form id="fcharge"><p class="small" style="margin:0 0 10px">${esc([j.date ? fmtD(j.date, {year: 'numeric'}) : 'No date', j.job, j.location].filter(Boolean).join(' · '))}</p>
+        ${field('Charge to customer (₱)', `<input name="charge" inputmode="decimal" value="${esc(j.charge > 0 ? j.charge : '')}" placeholder="e.g. 1500">`)}</form>`,
+        `<button class="btn" data-act="close">Cancel</button><button class="btn" data-act="jobNoCharge">No charge (warranty / free)</button><button class="btn primary" data-act="saveJobCharge">Save</button>`);
+    },
+    saveJobCharge: async el => {
+      const j = S.billJob, c = chargeVal(formData('#fcharge').charge);
+      if (c === null || c === '' || +c <= 0) return toast('Write the charge (more than 0)', true);
+      if (j.paid > 0 && +c < j.paid) return toast('Charge is less than already paid (' + peso(j.paid) + ')', true);
+      el.disabled = true;
+      try { await save('updateJob', {r: j.r, id: j.id, customer: j.customer, set: {charge: c, pay: 'Bill'}}, 'Charge saved ✓'); } catch (e) { el.disabled = false; }
+    },
+    jobNoCharge: async el => {
+      const j = S.billJob;
+      if (j.paid > 0) return toast('Already paid ' + peso(j.paid) + ' — change the charge instead', true);
+      el.disabled = true;
+      try { await save('updateJob', {r: j.r, id: j.id, customer: j.customer, set: {charge: '', pay: 'No charge'}}, 'No charge ✓'); } catch (e) { el.disabled = false; }
+    },
+    jobPayOpen: el => {
+      const j = (D().schedule || []).find(x => x.r === +el.dataset.r); if (!j) return;
+      S.billJob = j;
+      openSheet('Payment — ' + j.customer, `<form id="fjpay"><p class="small" style="margin:0 0 10px">${esc([j.date ? fmtD(j.date, {year: 'numeric'}) : 'No date', j.job].filter(Boolean).join(' · '))} · Balance <b>${peso(jBal(j))}</b></p>
+        <div class="f2">${field('Amount received (₱) *', `<input name="amount" inputmode="decimal" value="${esc(jBal(j))}">`)}${field('Date', `<input type="date" name="date" value="${today()}">`)}</div>
+        ${field('Method', choice('method', D().methods || ['Cash', 'Bank', 'GCash', 'Check', 'Other'], 'Cash'))}
+        ${field('OR # / reference', `<input name="ref" placeholder="e.g. OR 1234">`)}</form>`,
+        `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveJobPay">${ic('peso')} Save payment</button>`);
+    },
+    saveJobPay: async el => {
+      const j = S.billJob, f = formData('#fjpay'), a = chargeVal(f.amount);
+      if (!a || +a <= 0) return toast('Write the amount received', true);
+      if (+a > jBal(j) + 0.005) return toast('More than the balance (' + peso(jBal(j)) + ')', true);
+      el.disabled = true;
+      try { await save('jobPay', {r: j.r, id: j.id, amount: +a, date: f.date || today(), method: f.method || '', ref: f.ref || ''}, 'Payment saved ✓'); } catch (e) { el.disabled = false; }
+    },
+    soaTab: el => { S.soaTab = el.dataset.t; go('soa'); },
+    soaCust: el => { closeSheet(); printHtml(svcSoaDoc(el.dataset.cust)); },
+    soaList: () => printHtml(svcListDoc(), true),
     calDay: el => { S.calSel = el.dataset.d; if (el.dataset.d.slice(0, 7) !== S.calYM) S.calYM = el.dataset.d.slice(0, 7); render(); },
     calNav: el => { const [y, m] = S.calYM.split('-').map(Number); const d = new Date(Date.UTC(y, m - 1 + +el.dataset.n, 1)); S.calYM = d.toISOString().slice(0, 7); S.calSel = S.calYM + '-01'; if (S.calYM === today().slice(0, 7)) S.calSel = today(); render(); },
     calToday: () => { S.calYM = today().slice(0, 7); S.calSel = today(); render(); },
@@ -2090,10 +2239,10 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.t && Date.now() - (S._lastRefresh || 0) > 120000) { S._lastRefresh = Date.now(); refresh(true); } });
 
   /** one-time "What's new" popup — change NOTICE.id to show a new one; each phone shows it until "Got it" */
-  const NOTICE = {id: '2026-11-17a', title: 'What’s new (Nov 17)', items: [
-    ['📝 New job: Complain / request', 'New job now has a “Complain / request” box under Customer (e.g. Water leaking, Not cooling, Cleaning). It is saved in Notes as “Complain: …”, so when you tap Done you only write the Work done.'],
-    ['📅 Move to another day', 'The new date now starts at the next day, so you don’t have to change it again after saving. Same day and same time is blocked.'],
-    ['💡 Your 3 requests (Nov 17)', 'Pending repair (no date yet) and SOA for services / cleaning: we are working on them. See More → Ask for a change for the replies.']]};
+  const NOTICE = {id: '2026-11-17b', title: 'What’s new (Nov 17, evening)', items: [
+    ['⏳ Pending jobs (no date yet)', 'New job → tick “Pending — no date yet” (waiting for parts / customer). See them in Schedule → Pending. When you know the day: open the job → “📅 Set the date” and it goes to the calendar.'],
+    ['💵 Service SOA (service & cleaning)', 'Open a service / cleaning job → “Set charge” (or “No charge” for warranty). When the customer pays → “Payment received”. More → Service SOA shows who still has to pay, prints the SOA per customer and the collection list.'],
+    ['✅ Job done', 'When you tap Done on a service / cleaning job you can also write the charge.']]};
   function showNotice() {
     if (LS.get('brz_notice', '') === NOTICE.id || $('.veil')) return;
     const url = (D().sheetUrl || 'https://docs.google.com/spreadsheets/d/1jahKP1N3VVmiBqSXlr3xbmJxORVAWFVQNtxMLyqbCKE/edit') + '#gid=118798267';
