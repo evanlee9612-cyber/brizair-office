@@ -164,6 +164,13 @@ h2 { font-size: 17px; margin: 0; letter-spacing: -.01em; }
 .p-PARTIAL { background: var(--amber-2); color: var(--amber); }
 .p-UNPAID { background: var(--red-2); color: var(--red); }
 .p-Draft { background: var(--bg); color: var(--ink-2); }
+.p-Pending { background: var(--violet-2); color: var(--violet); }
+.p-Paid { background: var(--green-2); color: var(--green); }
+.p-Partial { background: var(--amber-2); color: var(--amber); }
+.p-Unpaid { background: var(--red-2); color: var(--red); }
+.p-Nocharge { background: var(--bg); color: var(--ink-2); }
+.pendbox { align-items: flex-start; gap: 10px; padding: 10px 12px; margin-bottom: 12px; border: 1.5px dashed var(--violet); border-radius: 12px; background: var(--violet-2); cursor: pointer; }
+.pendbox input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
 .p-Sent { background: var(--brand-2); color: var(--brand); }
 .p-Accepted { background: var(--green-2); color: var(--green); }
 .p-Lost { background: var(--red-2); color: var(--red); }
