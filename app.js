@@ -1237,6 +1237,7 @@
       ${field('Job *', choice('job', jobs, j.job || preset.job || 'Install'))}
       ${field('Customer *', `<input name="customer" required list="dlcust" autocomplete="off" value="${esc(j.customer || preset.cust || '')}" placeholder="Customer name">`)}
       ${dl('dlcust', custNames())}
+      ${j.r ? '' : field('Complain / request', `<input name="comp" list="dlcomp0" placeholder="e.g. Water leaking, Not cooling, Cleaning">`, 'Saved in Notes as “Complain: …”. You can leave it empty.') + dl('dlcomp0', ['Cleaning', 'Water Leaking', 'Not Cooling', 'Not Working', 'Noisy', 'Error code'])}
       ${field('Location', `<input name="location" value="${esc(j.location || '')}" placeholder="Address / building / room">`)}
       ${field('Units / model', `<input name="units" value="${esc(j.units || '')}" placeholder="e.g. 2 × HSN12ISB 1.5hp">`)}
       ${field('Technician', `<input name="tech" list="dltech" value="${esc(j.tech || '')}">`)}${dl('dltech', techs())}
@@ -1369,7 +1370,7 @@
     const jobs = D().jobs || ['Install', 'Service (AS)', 'Cleaning', 'Survey', 'Delivery', 'Pull-out', 'Meeting', 'Other'];
     openSheet('Move to another day', `<form id="fmovejob">
       <p class="small" style="margin:0 0 10px">${esc(j.customer)} · ${esc(fmtLong(j.date))}${j.time ? ' · ' + esc(j.time) : ''}</p>
-      <div class="f2">${field('New date *', `<input type="date" name="date" required value="${today()}">`)}
+      <div class="f2">${field('New date *', `<input type="date" name="date" required value="${addDays(j.date > today() ? j.date : today(), 1)}">`)}
         ${field('Time', `<input name="time" placeholder="e.g. 9:00 AM" list="dltime2" value="${esc(j.time || '')}">`)}</div>
       ${dl('dltime2', ['8:00 AM', '8:30 AM', '9:00 AM', '10:00 AM', '11:00 AM', '1:00 PM', '1:30 PM', '2:00 PM', '3:00 PM', '4:00 PM'])}
       ${field('Job on the new day', choice('job', jobs, j.job || 'Cleaning'))}
@@ -1582,6 +1583,8 @@
     saveJob: async el => {
       const f = formData('#fjob');
       if (!f.date || !f.customer) return toast('Date and customer are needed', true);
+      if (f.comp) f.notes = addNote(/^request|cleaning$/i.test(f.comp) ? 'Request: ' + f.comp : 'Complain: ' + f.comp, f.notes);
+      delete f.comp;
       el.disabled = true;
       try { await save('addJob', {job: f}, 'Job added ✓'); S.calSel = f.date; S.calYM = f.date.slice(0, 7); } catch (e) { el.disabled = false; }
     },
@@ -1621,6 +1624,7 @@
     saveJobMove: async el => {
       const j = S.moveJob, f = formData('#fmovejob');
       if (!f.date) return toast('Choose the new date', true);
+      if (f.date === j.date && (f.time || '') === (j.time || '')) return toast('Same day and time as now — choose the new date', true);
       const why = f.why ? ' (' + f.why + ')' : '';
       el.disabled = true;
       try {
@@ -2086,12 +2090,10 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.t && Date.now() - (S._lastRefresh || 0) > 120000) { S._lastRefresh = Date.now(); refresh(true); } });
 
   /** one-time "What's new" popup — change NOTICE.id to show a new one; each phone shows it until "Got it" */
-  const NOTICE = {id: '2026-11-16c', title: 'What’s new (Nov 16)', items: [
-    ['📊 Money for Jheena — no more Excel', 'Money now has Payables (we must pay → tap Paid), Cash & bank (Update balances) and “AR report”, which prints the same report as your Excel “Account Receivable” (receivables, cash, inventory, payables, income). Customer paid → “Payment received”. Nov 13 numbers from your file are already in.'],
-    ['💵 Receivables (Jheena’s file, Nov 13)', 'Updated in Money. New: PHIEXCEL P.O 2026-000741 (balance ₱5,247). 11 old Philexcel 10% retention lines (₱223,813.78) are not in your file — were they paid? Please tell us. They stay in the list (marked “CHECK”) until confirmed.'],
-    ['🧽 Cleaning list (Ladie’s AS Summary Report)', 'New tab CLEANING DUE in the Google Sheet: 213 customers with last cleaning and next cleaning (6 months). 84 are overdue, 2 are due within 30 days. Filter by Status. Home → “Cleaning due soon” also uses it now.'],
-    ['✅ Schedule: Done + work done', 'When you tap Done, write Complain and Work done (saved in Notes as “Complain: … / Work Done: …”). For Cleaning jobs, tick the units you cleaned — their next cleaning date is set by itself.'],
-    ['📅 Move to another day', 'For backjobs or resched (e.g. backjob → cleaning): open the job → “Move to another day”. The old job becomes Moved and the new job is added on the new date.']]};
+  const NOTICE = {id: '2026-11-17a', title: 'What’s new (Nov 17)', items: [
+    ['📝 New job: Complain / request', 'New job now has a “Complain / request” box under Customer (e.g. Water leaking, Not cooling, Cleaning). It is saved in Notes as “Complain: …”, so when you tap Done you only write the Work done.'],
+    ['📅 Move to another day', 'The new date now starts at the next day, so you don’t have to change it again after saving. Same day and same time is blocked.'],
+    ['💡 Your 3 requests (Nov 17)', 'Pending repair (no date yet) and SOA for services / cleaning: we are working on them. See More → Ask for a change for the replies.']]};
   function showNotice() {
     if (LS.get('brz_notice', '') === NOTICE.id || $('.veil')) return;
     const url = (D().sheetUrl || 'https://docs.google.com/spreadsheets/d/1jahKP1N3VVmiBqSXlr3xbmJxORVAWFVQNtxMLyqbCKE/edit') + '#gid=118798267';
