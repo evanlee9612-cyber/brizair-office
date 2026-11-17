@@ -28,6 +28,8 @@ Login: each person has a 6-digit PIN. Phone: add the site to the Home Screen. "?
 - Payment (Home) or "Payment received" (Money page) → choose the customer / project from RECEIVABLES, amount, method (Cash, Bank, GCash, Check). Balance updates by itself. Partial payments are fine — just enter the amount received.
 - New contract (Money page) → adds a new account to RECEIVABLES so payments can be tracked.
 - Statement of account → Money → open the account → "Statement" → Print / PDF.
+- Pending job (no date yet, waiting for parts / customer) → New job → tick "Pending — no date yet". List: Schedule → Pending. Open the job → "Set the date" when the day is known.
+- Service SOA (service & cleaning billing) → open a Service / Cleaning job → "Set charge" or "No charge" (warranty); customer pays → "Payment received". More → Service SOA: Unpaid by customer, Not billed, Paid; "SOA" per customer, "Collection list" for all unpaid. Sheet: SCHEDULE columns Charge, Paid, Paid date, Pay ref, Payment.
 - Cleaning done → Customers → open the customer → "Cleaned" on the unit. Next cleaning = 6 months later, automatic.
 - Book cleaning → Customers → open the customer → "Book cleaning" (or tap the cleaning item in Home "To do") → a cleaning job is filled in for the schedule.
 - New installation (Customers page) → adds the installed unit to CUSTOMERS (customer, model, serial numbers, installed date). If it came from stock, also record Unit OUT.
