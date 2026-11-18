@@ -32,3 +32,5 @@ Evan의 말: "레이디가 쓰게 편하게 최적화를 계속 해주는게 좋
 ## 서버 필요 후보 (쌓아 두기)
 - (11/17 완료: Pending 상태·대기 목록·서비스 SOA = 서버 v2.2 배포 버전 14, 사이트 v22. SCHEDULE M~Q열 Charge·Paid·Paid date·Pay ref·Payment)
 - 청소한 기계 여러 대를 한 번에 저장하는 기능(cleaningDone 묶음 처리). 지금은 기계 1대마다 요청을 따로 보내서 느리다.
+- (11/18 Ladie) PO 입고(orderRecv) 때 재고 자동 IN을 끄는 선택지: Received 화면에 "Don't add to stock" 체크 → 서버 `if (inStock && !req.noStock)`. 지금 임시방법: 주문 줄 Kind를 Other로 바꾼 뒤 Received.
+- (11/18 Sir Kim 설문) 매일 입출금 장부를 사이트로 + 화면·표를 기존 엑셀 양식처럼 보기 쉽게. 큰 변경이라 Evan 결정 필요(장부 엑셀 업로드 요청해 둠).
