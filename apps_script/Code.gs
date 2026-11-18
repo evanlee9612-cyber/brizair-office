@@ -12,7 +12,7 @@
  * AI answers: questions go to tab ASK. Sir Kim's PC (ask_relay.py + Codex/ChatGPT) picks them up with
  *   RELAY_KEY (Script Property, set once by Evan) and writes the answer back. Materials: tab KNOWLEDGE + Drive folder.
  */
-var VERSION = '2.2';
+var VERSION = '2.3';
 var SHEET_ID = '1jahKP1N3VVmiBqSXlr3xbmJxORVAWFVQNtxMLyqbCKE';
 var TZ = 'Asia/Manila';
 var SESSION_DAYS = 90;
@@ -621,8 +621,8 @@ function orderRecv_(req, me) {
     var day = toDate_(req.date || today_()), item = s_(g('item')), kind = s_(g('kind')).toLowerCase(), po = s_(g('po #'));
     T.sh.getRange(r, col_(T, 'received') + 1).setValue(got + n);
     T.sh.getRange(r, col_(T, 'status') + 1).setValue(got + n >= qty ? 'Received' : 'Ordered');
-    var inStock = '';
-    if (kind === 'unit' || kind === 'part') {
+    var inStock = '', skip = !!req.noStock && (kind === 'unit' || kind === 'part');
+    if (!skip && (kind === 'unit' || kind === 'part')) {
       var L = table_(kind === 'part' ? 'PARTS' : 'UNITS'), ic = col_(L, 'item'), pc = colOpt_(L, 'part no.'), pn = (item.match(/\[([^\]]+)\]\s*$/) || [])[1] || item;
       for (var i = 1; i < L.vals.length && !inStock; i++) if (s_(L.vals[i][ic]) === item) inStock = item;
       if (!inStock && pc >= 0) {
@@ -636,8 +636,8 @@ function orderRecv_(req, me) {
           'po / invoice #': clip_(po, 60), 'by': me.name, 'notes': clip_('Received (order ' + s_(g('id')) + ')' + (req.notes ? ' ' + req.notes : ''), 300)});
       }
     }
-    done_(me, 'Order received', n + ' × ' + item + (po ? ' · PO ' + po : '') + (inStock ? ' → stock IN' : ' (not in stock list)'), '📦');
-    return {ok: true, stock: inStock};
+    done_(me, 'Order received', n + ' × ' + item + (po ? ' · PO ' + po : '') + (skip ? ' (stock not changed — will add by hand)' : inStock ? ' → stock IN' : ' (not in stock list)'), '📦');
+    return {ok: true, stock: inStock, noStock: skip};
   });
 }
 /** new model / part in the stock list (IN / OUT / NOW formulas copied from the row above) */
@@ -840,18 +840,29 @@ function newReceivable_(req, me) {
   });
 }
 
+/** cleaning done: one unit {r, customer, isn} or many at once {units: [{r, customer, isn}, …]} (one request, one lock) */
 function cleaningDone_(req, me) {
-  var r = +req.r;
+  var many = Array.isArray(req.units), list = many ? req.units.slice(0, 200) : [{r: req.r, customer: req.customer, isn: req.isn}];
+  if (!list.length) throw bad_('Choose the units that were cleaned');
+  var day = req.date || today_();
   return withLock_(function () {
-    var T = table_('CUSTOMERS');
-    if (!(r >= 2 && r <= T.vals.length)) throw bad_('Customer row not found. Please refresh.');
-    var cur = T.vals[r - 1];
-    if (s_(cur[col_(T, 'customer')]) !== String(req.customer || '') || s_(cur[col_(T, 'indoor sn')]) !== String(req.isn || ''))
-      throw bad_('Customer list changed. Please refresh.');
-    T.sh.getRange(r, col_(T, 'last cleaning') + 1).setValue(toDate_(req.date || today_()));
-    ensureNextCleaning_(T, r);
-    done_(me, 'Cleaning done', s_(cur[col_(T, 'customer')]) + ' · ' + s_(cur[col_(T, 'model')]) + ' · SN ' + (req.isn || '-') + ' · ' + (req.date || today_()), '🧽');
-    return {ok: true};
+    var T = table_('CUSTOMERS'), cc = col_(T, 'customer'), sc = col_(T, 'indoor sn'), mc = col_(T, 'model'), lc = col_(T, 'last cleaning') + 1;
+    var okRows = [], bad = [];
+    list.forEach(function (u) {
+      var r = +u.r, cur = r >= 2 && r <= T.vals.length ? T.vals[r - 1] : null;
+      if (!cur || s_(cur[cc]) !== String(u.customer || '') || s_(cur[sc]) !== String(u.isn || '')) { bad.push(r || 0); return; }
+      T.sh.getRange(r, lc).setValue(toDate_(day));
+      ensureNextCleaning_(T, r);
+      okRows.push(r);
+      if (!many) done_(me, 'Cleaning done', s_(cur[cc]) + ' · ' + s_(cur[mc]) + ' · SN ' + (u.isn || '-') + ' · ' + day, '🧽');
+    });
+    if (!many && bad.length) throw bad_('Customer list changed. Please refresh.');
+    if (many && okRows.length) {
+      var names = okRows.map(function (r) { var c = T.vals[r - 1]; return s_(c[mc]) + (s_(c[sc]) ? ' SN ' + s_(c[sc]) : ''); });
+      done_(me, 'Cleaning done', s_(T.vals[okRows[0] - 1][cc]) + ' · ' + okRows.length + ' unit' + (okRows.length > 1 ? 's' : '') + ' · ' + day + ' · ' + names.join(', '), '🧽');
+    }
+    if (many && !okRows.length) throw bad_('Customer list changed. Please refresh.');
+    return {ok: true, done: okRows.length, bad: bad};
   });
 }
 
