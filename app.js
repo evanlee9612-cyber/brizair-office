@@ -1717,12 +1717,13 @@
       }
       toast('Saving…', false, 120000);
       try {
-        await call('updateJob', {r: j.r, id: j.id, customer: j.customer, set});
-        let bad = 0, i = 0;
-        const work = async () => { while (i < units.length) { const c = units[i++];
-          try { await call('cleaningDone', {r: c.r, customer: c.c || '', isn: c.isn || '', date: j.date}); } catch (e) { bad++; } } };
-        await Promise.all([work(), work(), work()]);
-        closeSheet(); await refresh(true); render();
+        let fresh = applyData((await call('updateJob', {r: j.r, id: j.id, customer: j.customer, set, withData: true})).data);
+        let bad = units.length;
+        try {
+          const r = await call('cleaningDone', {units: units.map(c => ({r: c.r, customer: c.c || '', isn: c.isn || ''})), date: j.date || today(), withData: true});
+          bad = (r.bad || []).length; fresh = applyData(r.data) && fresh;
+        } catch (e) { fresh = false; /* counted as failed below */ }
+        closeSheet(); if (!fresh) await refresh(true); render();
         toast(bad ? `Done ✓ — ${units.length - bad} units cleaned, ${bad} failed (refresh and try again)` : `Done ✓ — ${units.length} units cleaned, next cleaning in 6 months`, !!bad);
       } catch (e) { toast(e.message, true); el.disabled = false; }
     },
@@ -1847,7 +1848,7 @@
       openSheet('Order line', `<dl class="kv"><dt>Item</dt><dd>${esc(o.item)}</dd>${o.kind ? `<dt>Kind</dt><dd>${esc(o.kind)}</dd>` : ''}<dt>Qty</dt><dd>${o.qty}${o.got ? ' · received ' + o.got : ''}</dd>
           ${o.rate ? `<dt>Rate</dt><dd>${peso(o.rate)} each · ${peso(oAmt(o))}</dd>` : ''}<dt>Status</dt><dd>${esc(o.status || '')}</dd>${o.po ? `<dt>PO #</dt><dd>${esc(o.po)}</dd>` : ''}
           ${o.supplier ? `<dt>Supplier</dt><dd>${esc(o.supplier)}</dd>` : ''}${o.for ? `<dt>For</dt><dd>${esc(o.for)}</dd>` : ''}${o.date ? `<dt>Date</dt><dd>${esc(fmtD(o.date, {year: 'numeric'}))}</dd>` : ''}${o.notes ? `<dt>Notes</dt><dd>${esc(o.notes)}</dd>` : ''}</dl>
-        ${open ? `<h2 style="margin:6px 0">Delivery came?</h2><div class="f2">${field('How many arrived?', `<input id="or_qty" inputmode="numeric" value="${left}">`)}${field('Date', `<input type="date" id="or_date" value="${today()}">`)}</div>` : ''}`,
+        ${open ? `<h2 style="margin:6px 0">Delivery came?</h2><div class="f2">${field('How many arrived?', `<input id="or_qty" inputmode="numeric" value="${left}">`)}${field('Date', `<input type="date" id="or_date" value="${today()}">`)}</div>${/unit|part/i.test(o.kind || '') ? `<label class="row small" style="font-weight:600"><input type="checkbox" id="or_nostock"> Don’t add to stock — I will add it myself (new model / new price)</label>` : ''}` : ''}`,
         `<button class="btn" data-act="ordEdit">${ic('edit')} Edit</button>${open ? `<button class="btn primary" data-act="ordRecv">${ic('inbox')} Received</button>` : ''}`);
     },
     ordEdit: () => {
@@ -1861,8 +1862,10 @@
       if (!(n > 0 && n <= oLeft(o))) return toast('How many: 1 to ' + oLeft(o), true);
       el.disabled = true;
       try {
-        const r = await save('orderRecv', {r: o.r, id: o.id, qty: n, date: $('#or_date').value}, `Received ✓ ${n} × ${o.item}`);
-        if (r && r.stock === '' && /unit|part/i.test(o.kind || '')) toast('Received ✓ — not in the stock list, so stock did not change. Add it with “New model / New part”.', true);
+        const noStock = !!($('#or_nostock') && $('#or_nostock').checked);
+        const r = await save('orderRecv', {r: o.r, id: o.id, qty: n, date: $('#or_date').value, noStock}, `Received ✓ ${n} × ${o.item}`);
+        if (r && r.noStock) toast('Received ✓ — stock not changed. Add it yourself: Stock → New model / Stock IN.');
+        else if (r && r.stock === '' && /unit|part/i.test(o.kind || '')) toast('Received ✓ — not in the stock list, so stock did not change. Add it with “New model / New part”.', true);
       } catch (e) { el.disabled = false; }
     },
     recSave: async el => {
@@ -2120,7 +2123,7 @@
       const tips = {
         schedule: ['Tap a day to see its jobs. Tap a job to change status (Confirmed / Done) or print the Service report.', 'New job: the blue “New job” button.'],
         stock: ['Tap a model to see stock and recent moves, then IN or OUT.', 'Unit came from the supplier = IN. Installed / sold = OUT.', 'Sold to a project but not installed yet → “Reserve for a project”.', 'Other = other brands, appliances, second-hand and customer units for repair.'],
-        orders: ['To order = planned (Excel “FOR PO”). Add the PO # when you order it.', 'Delivery came → open the line → Received. Units / parts go IN to stock by itself.'],
+        orders: ['To order = planned (Excel “FOR PO”). Add the PO # when you order it.', 'Delivery came → open the line → Received. Units / parts go IN to stock by itself (tick “Don’t add to stock” to add them yourself).'],
         customers: ['Search by name, place, model or serial number.', 'Open a customer → “Cleaned” after cleaning; next cleaning is set 6 months later.'],
         money: ['Customer paid → “Payment received”. The balance updates by itself.', 'New sale on credit → “New contract”. “Statement” prints a statement of account.'],
         quotes: ['New quotation → add items from stock (price fills in) → Save & print / PDF.', 'Quotation accepted → open it → “Make invoice”.'],
@@ -2239,10 +2242,9 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.t && Date.now() - (S._lastRefresh || 0) > 120000) { S._lastRefresh = Date.now(); refresh(true); } });
 
   /** one-time "What's new" popup — change NOTICE.id to show a new one; each phone shows it until "Got it" */
-  const NOTICE = {id: '2026-11-17b', who: ['Ladie'], title: 'What’s new (Nov 17, evening)', items: [
-    ['⏳ Pending jobs (no date yet)', 'New job → tick “Pending — no date yet” (waiting for parts / customer). See them in Schedule → Pending. When you know the day: open the job → “📅 Set the date” and it goes to the calendar.'],
-    ['💵 Service SOA (service & cleaning)', 'Open a service / cleaning job → “Set charge” (or “No charge” for warranty). When the customer pays → “Payment received”. More → Service SOA shows who still has to pay, prints the SOA per customer and the collection list.'],
-    ['✅ Job done', 'When you tap Done on a service / cleaning job you can also write the charge.']]};
+  const NOTICE = {id: '2026-11-18', who: ['Ladie'], title: 'What’s new (Nov 18)', items: [
+    ['📦 PO received — your choice', 'Orders (PO) → open the line → tick “Don’t add to stock” → Received. Stock does not change, so you can add the new model / new SRP yourself.'],
+    ['🧽 Cleaning jobs save faster', 'When you tap Done on a cleaning job with many units, all units are saved at once.']]};
   const noticeForMe = () => !NOTICE.who || (S.me && NOTICE.who.some(w => lc(S.me.name).startsWith(lc(w))));
   /** shows after login / start; if another window (help, a form) is open or she is typing, it waits and tries again */
   function showNotice(tries) {
@@ -2251,11 +2253,10 @@
     const ae = document.activeElement, typing = ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName) && !$('.pad');
     if ($('.veil') || typing || !S.D) { if ((tries || 0) < 200) S._noticeT = setTimeout(() => showNotice((tries || 0) + 1), 3000); return; }
     openSheet(NOTICE.title, `<div class="list">${NOTICE.items.map(x => `<div class="item"><span class="grow"><div class="t">${x[0]}</div><div class="s" style="white-space:normal">${x[1]}</div></span></div>`).join('')}</div>`,
-      `<div class="btns" style="width:100%"><button class="btn" data-act="noticePend">${ic('cal')} Pending list</button><button class="btn" data-act="noticeSoa">${ic('doc')} Service SOA</button><button class="btn primary" data-act="noticeOk">Got it</button></div>`);
+      `<div class="btns" style="width:100%"><button class="btn" data-act="noticeOrders">${ic('inbox')} Orders</button><button class="btn primary" data-act="noticeOk">Got it</button></div>`);
   }
   ACT.noticeOk = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); setTimeout(showSurvey, 600); };
-  ACT.noticeSoa = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); go('soa'); };
-  ACT.noticePend = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); ACT.pendList(); };
+  ACT.noticeOrders = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); go('orders'); };
   Object.assign(ACT, REQ_ACTS);
 
   function start() {

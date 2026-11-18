@@ -181,8 +181,9 @@
       const o = (D.orders || []).find(k => k.r === b.r && k.id === b.id) || err('Not found. Please refresh.');
       o.got = (+o.got || 0) + b.qty; o.status = o.got >= o.qty ? 'Received' : 'Ordered';
       const list = /part/i.test(o.kind) ? D.parts : D.units, hit = list.find(x => x.item === o.item);
-      if (hit && /unit|part/i.test(o.kind)) (/part/i.test(o.kind) ? D.partLog : D.unitLog).push({r: ++seq, date: b.date, item: o.item, dir: 'IN', qty: b.qty, party: o.supplier, ref: o.po, by: me.name, notes: 'Received (order)'});
-      log(me, 'Order received', `${b.qty} × ${o.item}`); recalc(D); persist(); return {ok: true, stock: hit ? o.item : ''};
+      const skip = !!b.noStock && /unit|part/i.test(o.kind);
+      if (hit && !skip && /unit|part/i.test(o.kind)) (/part/i.test(o.kind) ? D.partLog : D.unitLog).push({r: ++seq, date: b.date, item: o.item, dir: 'IN', qty: b.qty, party: o.supplier, ref: o.po, by: me.name, notes: 'Received (order)'});
+      log(me, 'Order received', `${b.qty} × ${o.item}` + (skip ? ' (stock not changed)' : '')); recalc(D); persist(); return {ok: true, stock: hit && !skip ? o.item : '', noStock: skip};
     } else if (a === 'addItem') {
       const x = b.item, L = x.kind === 'part' ? D.parts : D.units;
       if (L.some(k => k.item === x.item)) err('Already in the list: ' + x.item);
@@ -197,9 +198,12 @@
       D.receivables.push({r: ++seq, no: String(D.receivables.length + 1), project: x.project, ref: x.ref, contract: x.contract, bal0: +x.balance, paid: 0, bal: +x.balance, status: 'UNPAID', remarks: x.remarks});
       log(me, 'New receivable', x.project);
     } else if (a === 'cleaningDone') {
-      const c = D.customers.find(x => x.r === b.r) || err('Not found'); c.lc = b.date;
-      const d = new Date(b.date + 'T00:00:00Z'); d.setUTCMonth(d.getUTCMonth() + 6); c.nc = d.toISOString().slice(0, 10);
-      log(me, 'Cleaning done', `${c.c} · ${c.m}`);
+      const many = Array.isArray(b.units), list = many ? b.units : [{r: b.r}], bad = [];
+      const d = new Date(b.date + 'T00:00:00Z'); d.setUTCMonth(d.getUTCMonth() + 6);
+      const okC = list.map(u => { const c = D.customers.find(x => x.r === u.r); if (!c) { bad.push(u.r); return null; } c.lc = b.date; c.nc = d.toISOString().slice(0, 10); return c; }).filter(Boolean);
+      if (!okC.length) err('Not found');
+      log(me, 'Cleaning done', many ? `${okC[0].c} · ${okC.length} units` : `${okC[0].c} · ${okC[0].m}`);
+      if (many) { recalc(D); persist(); return {ok: true, done: okC.length, bad}; }
     } else if (a === 'addInstall') {
       const x = b.inst; D.customers.push({r: ++seq, c: x.customer, co: x.company, l: x.location, m: x.model, d: x.desc, q: x.qty, isn: x.isn, osn: x.osn, inst: x.installed, nc: ''});
       log(me, 'New installation', `${x.customer} · ${x.model}`);
