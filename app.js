@@ -1402,7 +1402,7 @@
         ${j.photos ? `<a class="btn" href="${esc(j.photos)}" target="_blank" rel="noopener">${ic('sheet')} Open photos</a>` : ''}</div>
         <div class="hint" id="photoMsg">Photos are saved in Google Drive, one folder per job.</div></div>
       <div class="btns">${j.status !== 'Done' ? `<button class="btn primary" data-act="jobDoneOpen" data-r="${j.r}">✅ Done + work done</button>` : ''}
-        ${j.status !== 'Done' && j.status !== 'Cancelled' && j.status !== 'Pending' ? `<button class="btn" data-act="jobMoveOpen" data-r="${j.r}">📅 Move to another day</button>` : ''}
+        ${j.status !== 'Done' && j.status !== 'Cancelled' && j.status !== 'Pending' ? `<button class="btn" data-act="jobMoveOpen" data-r="${j.r}">📅 Move / continue another day</button>` : ''}
         <button class="btn" data-act="jobEdit" data-r="${j.r}">${ic('edit')} Edit</button>
         ${j.location ? `<a class="btn" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.location)}" target="_blank" rel="noopener">${ic('pin')} Map</a>` : ''}
         <button class="btn" data-act="quoteFor" data-cust="${esc(j.customer)}">${ic('doc')} Quotation</button>
@@ -1470,7 +1470,7 @@
         ${field('Time', `<input name="time" placeholder="e.g. 9:00 AM" list="dltime2" value="${esc(j.time || '')}">`)}</div>
       ${dl('dltime2', ['8:00 AM', '8:30 AM', '9:00 AM', '10:00 AM', '11:00 AM', '1:00 PM', '1:30 PM', '2:00 PM', '3:00 PM', '4:00 PM'])}
       ${field('Job on the new day', choice('job', jobs, j.job || 'Cleaning'))}
-      ${field('Why moved', `<input name="why" list="dlwhy" placeholder="e.g. Backjob, customer not available">`)}${dl('dlwhy', ['Backjob', 'Customer not available', 'Rain', 'No parts yet', 'Technician not available'])}
+      ${field('Why moved', `<input name="why" list="dlwhy" placeholder="e.g. Backjob, customer not available">`)}${dl('dlwhy', ['Continue cleaning', 'Continue work', 'Backjob', 'Customer not available', 'Rain', 'No parts yet', 'Technician not available'])}
       ${field('Technician', `<input name="tech" list="dltech2" value="${esc(j.tech || '')}">`)}${dl('dltech2', techs())}
       ${field('Notes for the new job', `<textarea name="notes"></textarea>`)}
       <p class="hint">The old job is marked “Moved” and a new job is added on the new date (same customer, location and units).</p>
@@ -2242,9 +2242,9 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.t && Date.now() - (S._lastRefresh || 0) > 120000) { S._lastRefresh = Date.now(); refresh(true); } });
 
   /** one-time "What's new" popup — change NOTICE.id to show a new one; each phone shows it until "Got it" */
-  const NOTICE = {id: '2026-11-18', who: ['Ladie'], title: 'What’s new (Nov 18)', items: [
-    ['📦 PO received — your choice', 'Orders (PO) → open the line → tick “Don’t add to stock” → Received. Stock does not change, so you can add the new model / new SRP yourself.'],
-    ['🧽 Cleaning jobs save faster', 'When you tap Done on a cleaning job with many units, all units are saved at once.']]};
+  const NOTICE = {id: '2026-11-19', who: ['Ladie'], title: 'What’s new (Nov 19)', items: [
+    ['📅 Not finished today? Continue another day', 'Open the job → “📅 Move / continue another day” → pick the day → Why: “Continue cleaning”. The new day’s job is made for you (same customer, units). No need to set Pending and add a new job.'],
+    ['⏳ Pending = waiting', 'Use Pending only when you are waiting for parts, customer or approval and there is no date yet.']]};
   const noticeForMe = () => !NOTICE.who || (S.me && NOTICE.who.some(w => lc(S.me.name).startsWith(lc(w))));
   /** shows after login / start; if another window (help, a form) is open or she is typing, it waits and tries again */
   function showNotice(tries) {
