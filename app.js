@@ -1953,10 +1953,18 @@
         `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveJobPay">${ic('peso')} Save payment</button>`);
     },
     saveJobPay: async el => {
-      const j = S.billJob, f = formData('#fjpay'), a = chargeVal(f.amount);
+      let j = S.billJob; const f = formData('#fjpay'), a = chargeVal(f.amount);
       if (!a || +a <= 0) return toast('Write the amount received', true);
       if (+a > jBal(j) + 0.005) return toast('More than the balance (' + peso(jBal(j)) + ')', true);
       el.disabled = true;
+      // 11/24: Ladie and Jheena saved the same payment 1 min apart → check the latest balance first
+      toast('Checking the latest balance…', false, 60000);
+      try {
+        const d = await call('boot'), fj = (d.schedule || []).find(x => j.id ? x.id === j.id : x.r === j.r);
+        if (fj) { S.D = d; S.me = d.me; LS.set(KEY + 'data', d); j = S.billJob = fj; }
+      } catch (e) { /* offline: keep the old check */ }
+      if (jBal(j) <= 0.005) { el.disabled = false; closeSheet(); render(); return toast('Already paid (' + peso(j.paid) + ') — someone saved this payment already', true); }
+      if (+a > jBal(j) + 0.005) { el.disabled = false; return toast('Balance changed just now: ' + peso(jBal(j)) + ' left. Check the amount', true); }
       try { await save('jobPay', {r: j.r, id: j.id, amount: +a, date: f.date || today(), method: f.method || '', ref: f.ref || ''}, 'Payment saved ✓'); } catch (e) { el.disabled = false; }
     },
     soaTab: el => { S.soaTab = el.dataset.t; go('soa'); },
@@ -2408,7 +2416,8 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.t && Date.now() - (S._lastRefresh || 0) > 120000) { S._lastRefresh = Date.now(); refresh(true); } });
 
   /** one-time "What's new" popup — change NOTICE.id to show a new one; each phone shows it until "Got it" */
-  const NOTICE = {id: '2026-11-24', who: ['Ladie', 'Sir Kim'], title: 'What’s new (Nov 24)', items: [
+  const NOTICE = {id: '2026-11-24b', who: ['Ladie', 'Sir Kim', 'Jheena'], title: 'What’s new (Nov 24)', items: [
+    ['💵 Payment saved only once', 'Ladie and Jheena both saved Gemik Clark’s ₱5,500 today, so it shows as ₱11,000 paid. From now on, “Save payment” checks the latest balance first. If someone already saved it, you will see “Already paid”.'],
     ['📋 Service history = your AS Summary Report', 'Customers → “Service history”. Tap a customer name → all past services in one table (date, complaint, findings, model, work done, technicians, amount, payment). Your AS SUMMARY REPORT is already inside.'],
     ['➕ Add or fix a line', '“Add line” for a new service, or tap any line to edit it. Jobs you mark Done in the Schedule also show here (green), so you don’t need to type them twice.'],
     ['🖨️ Print', '“Print / PDF” prints the table for the customer.']]};
