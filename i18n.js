@@ -3,6 +3,17 @@
 (function () {
   'use strict';
   const KO = {
+    // service history (Nov 24)
+    'Service history': '서비스 기록', 'Service history (AS Summary)': '서비스 기록 (AS Summary)', 'New line': '새 줄', 'Add line': '줄 추가', 'Edit line': '줄 수정',
+    'Newest first': '최신순', 'Oldest first': '오래된순', 'Units & jobs': '기계·일정', 'Open Service history': '서비스 기록 열기',
+    'Same as the AS Summary Report: tap a customer → all past services in one table.': 'AS Summary Report와 같아요: 손님을 누르면 지난 서비스가 한 표로 나와요.',
+    'Tap a line to edit it. Slide the table left / right to see all columns.': '줄을 누르면 고칠 수 있어요. 표를 좌우로 밀면 모든 칸이 보여요.',
+    'Search customer, building or person': '손님·건물·사람 찾기', 'Name / ACU location': '이름 / 에어컨 위치', 'Service / complaint': '요청·고장',
+    'Technical findings': '점검 결과', 'Work done': '한 작업', 'Technicians': '기사', 'Payment status': '결제 상태', 'Building / group': '건물 / 구분',
+    'Name / branch': '이름 / 지점', 'ACU location / room': '에어컨 위치 / 방', 'Service request / complaint': '요청 / 고장', 'Action taken / work done': '한 작업',
+    'Assigned technicians': '담당 기사', 'Write the customer': '손님 이름을 써 주세요', 'Write the service or the work done': '요청이나 한 작업을 써 주세요',
+    'Could not load the history': '기록을 못 불러왔어요', 'No exact match — check the list or add a new line': '같은 이름이 없어요 — 목록을 보거나 새 줄을 넣어 주세요',
+    '🆕 Done on the website (Schedule) — not in this list yet': '🆕 사이트 일정에서 완료한 것 — 아직 이 표에 없는 것',
     // nav & common
     'Home': '홈', 'Ask GPT': 'GPT 질문', 'Schedule': '일정', 'Stock': '재고', 'Customers': '고객', 'More': '더보기', 'Money': '돈',
     'Quotes & Forms': '견적서·양식', 'LG Monthly Report': 'LG 월별 보고', 'Activity': '최근 기록', 'Materials for AI': 'AI 자료',
