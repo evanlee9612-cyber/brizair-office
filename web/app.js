@@ -473,7 +473,7 @@
     let list = stockList(kind).slice();
     if (S.stockFilter === 'in') list = list.filter(x => x.now > 0);
     if (S.stockFilter === 'zero') list = list.filter(x => x.now <= 0);
-    if (q) list = list.filter(x => lc([x.item, x.type, x.hp, x.pn, x.group, x.notes].join(' ')).includes(q));
+    if (q) list = list.filter(x => modelHit([x.item, x.type, x.hp, x.pn, x.group, x.notes].join(' '), q));
     const groups = new Map();
     list.forEach(x => { const g = (kind === 'part' ? x.group : x.type) || 'Other'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(x); });
     const all = stockList(kind), sm = stockSum(all, kind), unit = kind === 'unit';
@@ -658,7 +658,7 @@
     picker($('#o_item', v), $('#o_pick', v), q => {
       q = lc(q); if (q.length < 2) return [];
       const k = S.ordKind, list = k === 'Part' ? (D().parts || []) : k === 'Unit' ? (D().units || []) : [];
-      return list.filter(x => lc([x.item, x.pn, x.type, x.hp, x.group].join(' ')).includes(q)).slice(0, 30)
+      return list.filter(x => modelHit([x.item, x.pn, x.type, x.hp, x.group].join(' '), q)).slice(0, 30)
         .map(x => ({t: x.item, s: [x.pn || x.type, x.hp, 'stock ' + x.now, x.cost ? 'cost ' + peso(x.cost) : ''].filter(Boolean).join(' · '), v: x}));
     }, o => { $('#o_item', v).value = o.t; if (o.v.cost && !$('#o_rate', v).value) $('#o_rate', v).value = o.v.cost; if (o.v.supplier && !v.querySelector('[name=supplier]').value) v.querySelector('[name=supplier]').value = o.v.supplier; $('#o_hint', v).textContent = 'In the stock list ✓ — it will go IN to stock when received'; });
   }
@@ -706,7 +706,7 @@
       let list = stockList(kind).slice();
       if (S.stockFilter === 'in') list = list.filter(x => x.now > 0);
       if (S.stockFilter === 'zero') list = list.filter(x => x.now <= 0);
-      if (q) list = list.filter(x => lc([x.item, x.type, x.hp, x.pn, x.group, x.notes].join(' ')).includes(q));
+      if (q) list = list.filter(x => modelHit([x.item, x.type, x.hp, x.pn, x.group, x.notes].join(' '), q));
       const groups = new Map();
       list.forEach(x => { const g = (kind === 'part' ? x.group : x.type) || 'Other'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(x); });
       $('#stockList').innerHTML = stockGroupsHtml(groups, kind);
@@ -781,6 +781,15 @@
   };
 
 
+  /** search text: normal match, or LG set name (HS12ISB → HSN12ISB/HSU12ISB): letters of the word in the same order, no spaces/dashes */
+  function modelHit(text, q) {
+    const t = lc(text);
+    if (t.includes(q)) return true;
+    const c = t.replace(/[^a-z0-9]/g, ''), w = q.replace(/[^a-z0-9]/g, '');
+    if (w.length < 5 || !/\d/.test(w)) return false;
+    if (c.includes(w)) return true;
+    return t.split(/[\s\/]+/).some(part => { const pc = part.replace(/[^a-z0-9]/g, ''); let i = 0; for (const ch of pc) if (ch === w[i]) i++; return i === w.length && pc.length - w.length <= 2 && pc[0] === w[0]; });
+  }
   // ───────── service history = Ladie's AS SUMMARY REPORT (one table per customer). Sheet tab SERVICE HISTORY, loaded only when opened ─────────
   const nk = x => lc(x || '').replace(/^(mr|ms|mrs|sir|maam|ma'am)\.?\s+/, '').replace(/[^a-z0-9]/g, '');
   const HS = S.hist = {idx: null, rows: {}, busy: {}};
@@ -1210,8 +1219,8 @@
     });
     picker($('#q_add'), $('#q_addpick'), q => {
       q = lc(q); if (q.length < 2) return [];
-      const u = (D().units || []).filter(x => lc(x.item + ' ' + x.type + ' ' + x.hp).includes(q)).slice(0, 10).map(x => ({t: x.item, s: [x.type, x.hp, 'stock ' + x.now, x.srp != null ? 'SRP ' + peso(x.srp, 0) : ''].filter(Boolean).join(' · '), v: {model: x.item, desc: [x.hp && x.hp !== '-' ? x.hp : '', x.type].filter(Boolean).join(' '), unit: 'Unit', srp: x.srp || '', price: x.srp || '', cost: x.cost || ''}}));
-      const p = (D().parts || []).filter(x => lc(x.item + ' ' + x.pn + ' ' + x.group).includes(q)).slice(0, 8).map(x => ({t: x.item, s: [x.group, 'stock ' + x.now, x.price != null ? peso(x.price) : ''].filter(Boolean).join(' · '), v: {model: x.pn || '', desc: `${x.group ? x.group + ' – ' : ''}${x.item}`, unit: 'Pc', srp: x.price || '', price: x.price || '', cost: x.cost || ''}}));
+      const u = (D().units || []).filter(x => modelHit(x.item + ' ' + x.type + ' ' + x.hp, q)).slice(0, 10).map(x => ({t: x.item, s: [x.type, x.hp, 'stock ' + x.now, x.srp != null ? 'SRP ' + peso(x.srp, 0) : ''].filter(Boolean).join(' · '), v: {model: x.item, desc: [x.hp && x.hp !== '-' ? x.hp : '', x.type].filter(Boolean).join(' '), unit: 'Unit', srp: x.srp || '', price: x.srp || '', cost: x.cost || ''}}));
+      const p = (D().parts || []).filter(x => modelHit(x.item + ' ' + x.pn + ' ' + x.group, q)).slice(0, 8).map(x => ({t: x.item, s: [x.group, 'stock ' + x.now, x.price != null ? peso(x.price) : ''].filter(Boolean).join(' · '), v: {model: x.pn || '', desc: `${x.group ? x.group + ' – ' : ''}${x.item}`, unit: 'Pc', srp: x.price || '', price: x.price || '', cost: x.cost || ''}}));
       return u.concat(p);
     }, o => { S.qd.items.push(Object.assign({qty: 1}, o.v)); $('#q_add').value = ''; qRender(); });
   };
@@ -1506,7 +1515,7 @@
     const kind = S.mv.kind;
     picker($('#m_item', v), $('#m_pick', v), q => {
       q = lc(q);
-      return stockList(kind).filter(x => !q || lc([x.item, x.type, x.hp, x.pn, x.group].join(' ')).includes(q)).slice(0, 40)
+      return stockList(kind).filter(x => !q || modelHit([x.item, x.type, x.hp, x.pn, x.group].join(' '), q)).slice(0, 40)
         .map(x => ({t: x.item, s: [kind === 'part' ? x.pn || x.group : x.type, x.hp, 'stock ' + x.now, x.cost ? (kind === 'part' ? 'LG ' + peso(x.cost) : 'cost ' + peso(x.cost, 0)) : ''].filter(Boolean).join(' · '), v: x}));
     }, o => { $('#m_item', v).value = o.t; S.mv.item = o.t; $('#m_now', v).textContent = 'In stock now: ' + o.v.now; });
     $('#m_item', v).addEventListener('input', () => { S.mv.item = ''; });
@@ -2077,7 +2086,7 @@
         `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveRes">Save</button>`, v => {
           picker($('#r_item', v), $('#r_pick', v), q => {
             q = lc(q);
-            return (D().units || []).filter(x => !q || lc([x.item, x.type, x.hp].join(' ')).includes(q)).slice(0, 40)
+            return (D().units || []).filter(x => !q || modelHit([x.item, x.type, x.hp].join(' '), q)).slice(0, 40)
               .map(x => ({t: x.item, s: [x.type, x.hp, 'stock ' + x.now, (resByItem().get(x.item) || 0) ? 'reserved ' + resByItem().get(x.item) : '', x.cost ? 'cost ' + peso(x.cost, 0) : ''].filter(Boolean).join(' · '), v: x}));
           }, o => { $('#r_item', v).value = o.t; S.rv.item = o.t; $('#r_now', v).textContent = 'In stock now: ' + o.v.now + ' · already reserved: ' + (resByItem().get(o.t) || 0); });
           $('#r_item', v).addEventListener('input', () => { S.rv.item = ''; });
