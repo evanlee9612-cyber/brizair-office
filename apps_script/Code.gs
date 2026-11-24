@@ -12,7 +12,7 @@
  * AI answers: questions go to tab ASK. Sir Kim's PC (ask_relay.py + Codex/ChatGPT) picks them up with
  *   RELAY_KEY (Script Property, set once by Evan) and writes the answer back. Materials: tab KNOWLEDGE + Drive folder.
  */
-var VERSION = '2.3';
+var VERSION = '2.4';
 var SHEET_ID = '1jahKP1N3VVmiBqSXlr3xbmJxORVAWFVQNtxMLyqbCKE';
 var TZ = 'Asia/Manila';
 var SESSION_DAYS = 90;
@@ -66,6 +66,8 @@ var ACTIONS = {
   resAdd: resAdd_,
   resSet: resSet_,
   recSave: recSave_,
+  hist: hist_,
+  histImport: histImport_,
   orderRecv: orderRecv_,
   addItem: addItem_,
   payment: payment_,
@@ -331,7 +333,7 @@ function boot_(req, me, parts) {
     out.unitLog = moves_('UNIT IN-OUT');
     out.partLog = moves_('PART IN-OUT');
     out.unitRes = resRows_();
-    Object.keys(RECS).forEach(function (k) { if (!RECS[k].money) out[k] = recRows_(k); });
+    Object.keys(RECS).forEach(function (k) { if (!RECS[k].money && !RECS[k].lazy) out[k] = recRows_(k); });
     tm.stock = Date.now() - t0;
   }
   if (want.schedule) {
@@ -377,7 +379,7 @@ function boot_(req, me, parts) {
         return {r: i + 1, project: proj, date: d_(dv) || s_(dv), amount: amt || 0};
       });
     }
-    Object.keys(RECS).forEach(function (k) { if (RECS[k].money) out[k] = recRows_(k); });
+    Object.keys(RECS).forEach(function (k) { if (RECS[k].money && !RECS[k].lazy) out[k] = recRows_(k); });
     tm.money = Date.now() - t0;
   }
   if (want.customers) {
@@ -558,6 +560,12 @@ var RECS = {
     ['bri', 'Bank BRIZAIR CORP (은행)', 'num'], ['good', 'Bank GOODLIVING CORP (은행)', 'num'], ['by', 'By (작성)'], ['notes', 'Notes (메모)']]},
   requests: {tab: 'REQUESTS', pre: 'Q', need: ['text'], cols: [['id', 'ID'], ['date', 'Date (날짜)', 'date'], ['who', 'Who (누가)'], ['type', 'Type (종류)'],
     ['text', 'Request (요청)'], ['status', 'Status (상태)'], ['reply', 'Reply (답)'], ['upd', 'Updated (수정일)', 'date']]},
+  // service history per customer (from Ladie's AS SUMMARY REPORT + new lines). lazy = not in boot, read with action 'hist'
+  hist: {tab: 'SERVICE HISTORY', pre: 'H', lazy: true, need: ['cust'], cols: [['id', 'ID'], ['cust', 'Customer (고객)'], ['date', 'Date (날짜)', 'dtxt'],
+    ['grp', 'Group (구분)'], ['name', 'Name / branch (이름·지점)'], ['loc', 'ACU location (위치)'], ['addr', 'Address (주소)'],
+    ['svc', 'Service / complaint (요청·고장)'], ['find', 'Technical findings (점검 결과)'], ['model', 'Model (모델)'], ['work', 'Work done (한 작업)'],
+    ['tech', 'Technicians (기사)'], ['qty', 'Qty (수량)'], ['amount', 'Amount (단가)'], ['total', 'Total (합계)'], ['pay', 'Payment (결제)'],
+    ['note', 'Note (메모)'], ['head', 'Heading (제목줄)'], ['src', 'Source (출처)'], ['by', 'Added by (작성)']]},
   prices: {tab: 'MATERIAL PRICES', readOnly: true, cols: [['item', 'Item (자재)'], ['knp', 'KNP price (KNP 가격)', 'num'], ['hisys', 'Hisys price (Hisys 가격)', 'num'], ['notes', 'Notes (메모)']]}
 };
 function recRows_(k) {
@@ -570,6 +578,7 @@ function recRows_(k) {
       var ci = colOpt_(T, norm_(c[1])); if (ci < 0) return;
       var v = r[ci];
       o[c[0]] = c[2] === 'num' ? n_(v) : c[2] === 'date' ? d_(v) : s_(v);
+      if (o[c[0]] === '' && R.lazy) { delete o[c[0]]; return; }  // smaller reply for long lists
       if (c[0] !== 'id' && o[c[0]] !== '' && o[c[0]] !== null) any = true;
     });
     return any ? o : null;
@@ -577,6 +586,7 @@ function recRows_(k) {
 }
 function recVal_(c, v) {
   if (c[2] === 'num') { var n = n_(v); return n === null ? '' : n; }
+  if (c[2] === 'dtxt') return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? toDate_(v) : clip_(v, 120);
   if (c[2] === 'date') return v ? toDate_(v) : '';
   return clip_(v, 400);
 }
@@ -605,6 +615,50 @@ function recSave_(req, me) {
     var name = set.item || set.name || (req.r ? s_(T.vals[row - 1][colOpt_(T, norm_((cmap.item || cmap.name)[1]))]) : '');
     done_(me, (req.r ? 'Updated' : 'Added') + ' · ' + R.tab, name + (set.status ? ' → ' + set.status : '') + (set.qty !== undefined ? ' · qty ' + set.qty : ''), '🗂️');
     return {ok: true, r: row};
+  });
+}
+/** service history: no c → list of customers (name, lines, last date); c → that customer's lines (sheet order) */
+function hist_(req, me) {
+  var rows = recRows_('hist');
+  if (req.c) return {ok: true, c: req.c, rows: rows.filter(function (x) { return x.cust === req.c; })};
+  var m = {}, list = [];
+  rows.forEach(function (x) {
+    var k = x.cust; if (!k) return;
+    if (!m[k]) { m[k] = {c: k, n: 0, last: '', names: {}}; list.push(m[k]); }
+    if (x.head) return;
+    m[k].n++;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(x.date || '') && x.date > m[k].last && x.date < '2100') m[k].last = x.date;
+    if (x.name) m[k].names[x.name] = 1;
+  });
+  list.forEach(function (g) { g.names = Object.keys(g.names).slice(0, 12); });
+  return {ok: true, list: list};
+}
+/** owner only: bulk import of Excel lines. mode 'start' removes old lines whose Source starts with req.prefix (website lines stay); 'add' appends rows */
+function histImport_(req, me) {
+  if (me.role !== 'owner') throw bad_('Owner only');
+  var R = RECS.hist;
+  return withLock_(function () {
+    var ss = ss_(), sh = ss.getSheetByName(R.tab), heads = R.cols.map(function (c) { return c[1]; });
+    if (!sh) { sh = ss.insertSheet(R.tab); sh.getRange(1, 1, 1, heads.length).setValues([heads]).setFontWeight('bold'); sh.setFrozenRows(1); }
+    if (req.mode === 'start') {
+      var pre = String(req.prefix || '');
+      if (pre.length < 5) throw bad_('prefix needed');
+      var vals = sh.getDataRange().getValues(), si = heads.indexOf('Source (출처)');
+      var keep = vals.slice(1).filter(function (r) { return String(r[si] || '').indexOf(pre) !== 0 && r.join('') !== ''; });
+      if (vals.length > 1) sh.getRange(2, 1, vals.length - 1, vals[0].length).clearContent();
+      if (keep.length) sh.getRange(2, 1, keep.length, keep[0].length).setValues(keep);
+      log_(me.name, 'History import start', pre + ' · kept ' + keep.length);
+      return {ok: true, kept: keep.length, removed: vals.length - 1 - keep.length};
+    }
+    var day = Utilities.formatDate(new Date(), TZ, 'yyyyMMdd'), base = +req.base || 0;
+    var add = (req.rows || []).map(function (o, i) {
+      return R.cols.map(function (c) { return c[0] === 'id' ? 'BRZ-H-' + day + '-X' + (base + i + 1) : o[c[0]] === undefined ? '' : recVal_(c, o[c[0]]); });
+    });
+    if (!add.length) return {ok: true, added: 0};
+    var start = sh.getLastRow() + 1;
+    sh.getRange(start, 1, add.length, heads.length).setValues(add);
+    if (req.last) log_(me.name, 'History import done', String(req.label || '') + ' · total ' + (start + add.length - 2) + ' lines');
+    return {ok: true, added: add.length, to: start + add.length - 1};
   });
 }
 /** order line received (all or part): Received goes up; the unit / part goes IN to stock when it is in the stock list */

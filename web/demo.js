@@ -113,6 +113,17 @@
     const D = db();
     if (a === 'boot') { D.me = me; return JSON.parse(JSON.stringify(D)); }
     if (a === 'logout') return {ok: true};
+    if (a === 'hist') {  // fake service history (AS Summary Report)
+      if (!D.hist) { D.hist = [
+        {r: 2, id: 'DEMO-H-1', cust: 'Sample Grill', date: '2025-03-02', name: 'Sample Grill', loc: 'VIP 1', svc: 'Cleaning', find: 'Dirty', model: 'Split Type', work: '3pcs: General Cleaning Indoor and Outdoor', tech: 'Romeo, Joseph', qty: '3', amount: '1500', total: '4500', pay: 'PAID 03.05.25', src: 'Demo'},
+        {r: 3, id: 'DEMO-H-2', cust: 'Sample Grill', date: '2025-08-10', name: 'Sample Grill', loc: 'Kitchen', svc: 'Water Leaking', find: 'Drain Clogging', model: 'Ceiling Cassette', work: '1pc: Flush out drain', tech: 'Aldrin, Eric', pay: 'FREE CHARGE', src: 'Demo'},
+        {r: 4, id: 'DEMO-H-3', cust: 'Sample Tower', note: 'TOWER 1 — ROOM 301', head: '1', src: 'Demo'},
+        {r: 5, id: 'DEMO-H-4', cust: 'Sample Tower', grp: 'TOWER 1 — ROOM 301', date: '2026-10-21', name: 'Room 301', svc: 'Not Cooling', find: 'Lack of Freon', model: '1 Way Ceiling Cassette', work: '1pc: Charge Freon', tech: 'Jhonrel, Edz', qty: '1', amount: '2500', total: '2500', pay: 'UNPAID', src: 'Demo'}]; persist(); }
+      const H = D.hist;
+      if (b.c) return {ok: true, c: b.c, rows: JSON.parse(JSON.stringify(H.filter(x => x.cust === b.c)))};
+      const m = {}; H.forEach(x => { const g = m[x.cust] = m[x.cust] || {c: x.cust, n: 0, last: '', names: []}; if (x.head) return; g.n++; if (x.date > g.last) g.last = x.date; if (x.name && !g.names.includes(x.name)) g.names.push(x.name); });
+      return {ok: true, list: Object.values(m)};
+    }
     if (a === 'ask') {
       const id = 'A' + (++seq); D.ask.push({id, who: me.name, time: new Date().toLocaleString('sv-SE', {timeZone: 'Asia/Manila'}).slice(0, 16), q: b.q, status: 'waiting', a: ''});
       persist(); return {ok: true, id};

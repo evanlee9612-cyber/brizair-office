@@ -437,3 +437,23 @@ html, body { overflow-x: hidden; }
 .qf-sec li.nob { list-style: none; margin-left: -18px; }
 .qf-sign { display: grid; grid-template-columns: 1fr 1fr 1fr 1.3fr; gap: 18px; margin-top: 22px; font-size: 10.5px; break-inside: avoid; }
 .qf-sign .ln { display: block; border-bottom: 1px solid #000; height: 34px; margin-bottom: 3px; }
+
+/* service history (AS Summary Report) */
+.f3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 10px; }
+.f3 > .f { min-width: 0; }
+.hgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.hcell { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); cursor: pointer; min-width: 0; }
+.hcell b { color: #1a5fb4; text-decoration: underline; text-underline-offset: 2px; max-width: 100%; }
+.hcell:hover { background: #f1f6fd; }
+table.htbl { border-collapse: collapse; font-size: 12.5px; min-width: 1250px; width: 100%; }
+.htbl th, .htbl td { border: 1px solid var(--line); padding: 6px 7px; text-align: left; vertical-align: top; white-space: normal; }
+.htbl th { background: #dbe7f5; font-weight: 750; color: #1f3a5f; position: sticky; top: 0; z-index: 1; font-size: 12px; text-transform: uppercase; }
+.htbl .h-date { width: 92px; white-space: nowrap; font-weight: 650; }
+.htbl .h-name { min-width: 150px; } .htbl .h-work { min-width: 230px; } .htbl .h-svc, .htbl .h-find { min-width: 120px; }
+.htbl .h-qty { width: 40px; text-align: center; } .htbl .h-amount, .htbl .h-total { width: 80px; text-align: right; white-space: nowrap; }
+.htbl .h-pay { min-width: 110px; }
+.htbl tr.hhead td { background: #fff4d6; font-weight: 800; color: #6b4e00; }
+.htbl tr.hhead.hweb td { background: #e6f6ec; color: #17603a; }
+.htbl tr.hrow { cursor: pointer; } .htbl tr.hrow:hover td { background: #f6f9fe; }
+.hprint table.htbl { min-width: 0; font-size: 9.5px; } .hprint .htbl th { position: static; }
+#htWrap { max-height: 76vh; }

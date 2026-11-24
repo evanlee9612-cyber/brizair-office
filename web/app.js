@@ -197,7 +197,7 @@
 
   // ───────── shell ─────────
   const NAV = [
-    ['home', 'Home', 'home'], ['ask', 'Ask GPT', 'chat'], ['schedule', 'Schedule', 'cal'], ['stock', 'Stock', 'box'], ['orders', 'Orders (PO)', 'inbox'], ['customers', 'Customers', 'users'],
+    ['home', 'Home', 'home'], ['ask', 'Ask GPT', 'chat'], ['schedule', 'Schedule', 'cal'], ['stock', 'Stock', 'box'], ['orders', 'Orders (PO)', 'inbox'], ['customers', 'Customers', 'users'], ['hist', 'Service history', 'log'],
     ['money', 'Money', 'peso'], ['soa', 'Service SOA', 'doc'], ['materials', 'Materials for AI', 'book'], ['quotes', 'Quotes & Invoices', 'doc'], ['report', 'LG Monthly Report', 'chart'], ['activity', 'Activity', 'log'], ['requests', 'Ask for a change', 'help']
   ];
   function shell() {
@@ -241,7 +241,7 @@
     const arg = rest.join('/');
     S.route = name;
     document.body.dataset.route = name;
-    const tabFor = {cust: 'customers', materials: 'ask'}[name] || name;
+    const tabFor = {cust: 'customers', hist: 'customers', materials: 'ask'}[name] || name;
     $$('.me').forEach(b => b.classList.toggle('on', ['more', 'money', 'soa', 'quotes', 'quote', 'report', 'activity', 'help', 'orders', 'requests'].includes(name)));
     $$('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.go === tabFor));
     $$('.side button[data-go]').forEach(b => b.classList.toggle('on', b.dataset.go === ({cust: 'customers', quote: 'quotes'}[name] || name)));
@@ -718,7 +718,7 @@
     const q = S.q.cust || '';
     return `
       <div class="row between wrap" style="margin-bottom:12px"><h1 style="margin:0">Customers</h1>
-        <button class="btn primary sm" data-act="install">${ic('plus')} New installation</button></div>
+        <div class="btns"><button class="btn sm" data-go="hist">${ic('log')} Service history</button><button class="btn primary sm" data-act="install">${ic('plus')} New installation</button></div></div>
       <div class="search">${ic('search')}<input id="qcust" placeholder="Search name, company, place, model or serial no." value="${esc(q)}" autocomplete="off"></div>
       <div id="custRes">${custResults(q)}</div>`;
   };
@@ -767,6 +767,7 @@
         <button class="btn" data-act="quoteFor" data-cust="${esc(name)}">${ic('doc')} Quotation</button>
         <button class="btn" data-act="bookClean" data-cust="${esc(name)}">${ic('spark')} Book cleaning</button>
         <button class="btn" data-act="install" data-cust="${esc(name)}">${ic('plus')} Add unit</button>
+        <button class="btn" data-act="histFor" data-cust="${esc(name)}">${ic('log')} Service history</button>
       </div>
       <div class="card"><div class="card-h"><h2>Units (${rows.length})</h2></div><div class="list">
         ${rows.map(c => `<div class="item" style="align-items:flex-start">
@@ -777,6 +778,162 @@
           <button class="btn sm" data-act="cleanRow" data-r="${c.r}">${ic('spark')} Cleaned</button></div>`).join('')}</div></div>
       <div class="card"><div class="card-h"><h2>Jobs</h2><button class="btn ghost sm" data-act="newJob" data-cust="${esc(name)}">+ Add</button></div><div class="list">${jobs.map(j => jobRow(j, true)).join('') || '<div class="empty">No jobs in the schedule</div>'}</div></div>
       ${recs.length ? `<div class="card"><div class="card-h"><h2>Receivables (name match)</h2></div><div class="list">${recs.map(arRow).join('')}</div></div>` : ''}`;
+  };
+
+
+  // ───────── service history = Ladie's AS SUMMARY REPORT (one table per customer). Sheet tab SERVICE HISTORY, loaded only when opened ─────────
+  const nk = x => lc(x || '').replace(/^(mr|ms|mrs|sir|maam|ma'am)\.?\s+/, '').replace(/[^a-z0-9]/g, '');
+  const HS = S.hist = {idx: null, rows: {}, busy: {}};
+  async function histLoad(c, force) {
+    const key = c || '';
+    if (HS.busy[key] || (!force && (c ? HS.rows[c] : HS.idx))) return;
+    HS.busy[key] = true;
+    try {
+      const r = await call('hist', c ? {c} : {});
+      if (c) HS.rows[c] = r.rows || []; else HS.idx = r.list || [];
+    } catch (e) { toast(tr('Could not load the history') + ': ' + e.message, true); if (c) HS.rows[c] = HS.rows[c] || null; }
+    HS.busy[key] = false;
+    if (S.route === 'hist') render();
+  }
+  /** website jobs (Schedule › Done) of this history customer */
+  function histJobMatch(tab, names) {
+    const keys = [tab].concat(names || []).map(nk).filter(x => x.length >= 4);
+    return j => { const b = nk(j.customer); return b.length >= 4 && keys.some(x => b.startsWith(x) || x.startsWith(b)); };
+  }
+  function histTabFor(cust) {
+    const b = nk(cust), idx = HS.idx || [];
+    if (b.length < 3) return '';
+    const g = idx.find(x => nk(x.c) === b) || idx.find(x => (x.names || []).some(n => nk(n) === b))
+      || idx.find(x => { const a = nk(x.c); return a.length >= 4 && (b.startsWith(a) || (b.length >= 5 && a.startsWith(b))); });
+    return g ? g.c : '';
+  }
+  VIEWS.hist = arg => arg ? histCust(arg) : histIndex();
+  VIEWS.hist.after = arg => {
+    const inp = $('#qhist');
+    inp && inp.addEventListener('input', () => { S.q.hist = inp.value; $('#histRes').innerHTML = histIdxList(inp.value); });
+    const t = $('#htWrap'); if (t && S._hScroll) { t.scrollLeft = 0; S._hScroll = 0; }
+  };
+  function histIndex() {
+    const head = `<div class="row between wrap" style="margin-bottom:6px"><h1 style="margin:0">Service history</h1>
+      <button class="btn primary sm" data-act="histAdd">${ic('plus')} New line</button></div>
+      <p class="sub">Same as the AS Summary Report: tap a customer → all past services in one table.</p>`;
+    if (!HS.idx) { histLoad(''); return head + '<div class="empty" style="padding:40px 0">Loading…</div>'; }
+    return head + `<div class="search">${ic('search')}<input id="qhist" placeholder="Search customer, building or person" value="${esc(S.q.hist || '')}" autocomplete="off"></div>
+      <div id="histRes">${histIdxList(S.q.hist || '')}</div>`;
+  }
+  function histIdxList(q) {
+    const w = lc(q).trim().split(/\s+/).filter(Boolean);
+    const list = (HS.idx || []).filter(g => { const t = lc(g.c + ' ' + (g.names || []).join(' ')); return w.every(x => t.includes(x)); })
+      .sort((a, b) => a.c.localeCompare(b.c));
+    return `<div class="card"><div class="card-h"><h2>${list.length} customer${list.length === 1 ? '' : 's'}</h2></div><div class="hgrid">${list.map(g =>
+      `<button class="hcell" data-go="hist/${encodeURIComponent(g.c)}"><b class="clip">${esc(g.c)}</b><span class="muted small">${g.n} line${g.n === 1 ? '' : 's'}${g.last ? ' · ' + esc(fmtD(g.last, {year: 'numeric'})) : ''}</span></button>`).join('')
+      || '<div class="empty">No customer found</div>'}</div></div>`;
+  }
+  const H_COLS = [['date', 'Date'], ['name', 'Name / ACU location'], ['svc', 'Service / complaint'], ['find', 'Technical findings'], ['model', 'Model'],
+    ['work', 'Work done'], ['tech', 'Technicians'], ['qty', 'Qty'], ['amount', 'Amount'], ['total', 'Total'], ['pay', 'Payment status']];
+  function histBlocks(c) {
+    const rows = HS.rows[c] || [], g = (HS.idx || []).find(x => x.c === c) || {};
+    const blocks = [{head: '', lines: []}], byHead = {'': blocks[0]};
+    const blk = h => byHead[h] || (byHead[h] = blocks[blocks.push({head: h, lines: []}) - 1]);
+    rows.forEach(x => { if (x.head) blk(x.note || ''); else blk(x.grp || '').lines.push(x); });  // a line goes under its building / group
+    const dates = new Set(rows.map(x => x.date).filter(Boolean)), m = histJobMatch(c, g.names);
+    const web = (D().schedule || []).filter(j => j.status === 'Done' && j.date && m(j) && !dates.has(j.date)).sort((a, b) => a.date.localeCompare(b.date))
+      .map(j => ({web: 1, r: j.r, date: j.date, name: j.customer, loc: j.location, svc: j.job, model: j.units, work: j.notes, tech: j.tech, total: j.charge > 0 ? j.charge : '', pay: jPay(j)}));
+    if (web.length) blocks.unshift({head: '🆕 Done on the website (Schedule) — not in this list yet', lines: web, web: 1});
+    const out = blocks.filter(b => b.lines.length);
+    if (S.histOld) return out;
+    const last = b => b.lines.reduce((a, x) => (/^\d{4}-/.test(x.date || '') && x.date > a ? x.date : a), '');
+    return out.map(b => Object.assign({}, b, {lines: b.lines.slice().reverse()})).sort((a, b) => (b.web || 0) - (a.web || 0) || last(b).localeCompare(last(a)));
+  }
+  const hMoney = v => v === '' || v === undefined || v === null ? '' : isNaN(+String(v).replace(/,/g, '')) ? esc(v) : peso(+String(v).replace(/,/g, ''));
+  function histTable(c, forPrint) {
+    const bl = histBlocks(c), n = H_COLS.length;
+    const cell = (x, k, prev) => {
+      if (k === 'date') return prev && prev.date === x.date && prev.name === x.name ? '' : esc(/^\d{4}-\d{2}-\d{2}$/.test(x.date || '') ? fmtD(x.date, {year: 'numeric'}) : (x.date || ''));
+      if (k === 'name') return esc([x.name, x.loc].filter(Boolean).join(' — ')) + (x.addr && !forPrint ? `<div class="muted small">${esc(x.addr)}</div>` : '');
+      if (k === 'amount' || k === 'total') return hMoney(x[k]);
+      return esc(x[k] || '');
+    };
+    const body = bl.map(b => (b.head ? `<tr class="hhead${b.web ? ' hweb' : ''}"><td colspan="${n}">${esc(b.head)}</td></tr>` : '') + b.lines.map((x, i) => x.note && !x.work
+      ? `<tr><td colspan="${n}" class="muted"><i>${esc(x.note)}</i></td></tr>`
+      : `<tr${forPrint ? '' : x.web ? ` class="hrow" data-act="job" data-r="${x.r}"` : ` class="hrow" data-act="histEdit" data-r="${x.r}"`}>${H_COLS.map(k => `<td class="h-${k[0]}">${cell(x, k[0], b.lines[i - 1])}</td>`).join('')}</tr>`).join('')).join('');
+    return `<table class="htbl"><thead><tr>${H_COLS.map(k => `<th class="h-${k[0]}">${k[1]}</th>`).join('')}</tr></thead><tbody>${body || `<tr><td colspan="${n}"><div class="empty">No lines yet</div></td></tr>`}</tbody></table>`;
+  }
+  function histCust(c) {
+    const back = `<button class="btn ghost sm" data-go="hist" style="padding-left:0">${ic('left')} Service history</button>`;
+    if (!HS.idx) histLoad('');
+    if (!HS.rows[c]) { histLoad(c); return back + `<h1>${esc(c)}</h1><div class="empty" style="padding:40px 0">Loading…</div>`; }
+    const n = HS.rows[c].filter(x => !x.head).length, cg = custGroups(), cust = cg.get(c) ? c : Array.from(cg.keys()).find(k => histTabFor(k) === c);
+    return back + `<div class="row between wrap"><h1 style="margin:0">${esc(c)}</h1><span class="muted small">${n} line${n === 1 ? '' : 's'}</span></div>
+      <div class="btns" style="margin:10px 0 12px">
+        <button class="btn primary" data-act="histAdd" data-cust="${esc(c)}">${ic('plus')} Add line</button>
+        <button class="btn" data-act="histOrder">⇅ ${S.histOld ? 'Oldest first' : 'Newest first'}</button>
+        <button class="btn" data-act="histPrint" data-cust="${esc(c)}">${ic('print')} Print / PDF</button>
+        ${cust ? `<button class="btn" data-go="cust/${encodeURIComponent(cust)}">${ic('users')} Units & jobs</button>` : ''}
+      </div>
+      <p class="small muted" style="margin:0 0 8px">Tap a line to edit it. Slide the table left / right to see all columns.</p>
+      <div class="tbl-wrap" id="htWrap">${histTable(c)}</div>`;
+  }
+  function histForm(x, c) {
+    x = x || {};
+    const cu = x.cust || c || '', isoD = !x.date || /^\d{4}-\d{2}-\d{2}$/.test(x.date);
+    const heads = (HS.rows[cu] || []).filter(r => r.head).map(r => r.note);
+    const inp = (k, ph, v) => `<input name="${k}" value="${esc(v === undefined ? (x[k] === undefined || x[k] === null ? '' : x[k]) : v)}"${ph ? ` placeholder="${esc(ph)}"` : ''}>`;
+    return `<form id="fhist">
+      ${field('Customer', `<input name="cust" list="hcustl" value="${esc(cu)}" required><datalist id="hcustl">${(HS.idx || []).map(g => `<option value="${esc(g.c)}">`).join('')}</datalist>`, 'Same name as the tab in the AS Summary Report. A new name = a new customer.')}
+      ${field('Date', isoD ? `<input type="date" name="date" value="${esc(x.date || (x.r ? '' : today()))}">` : inp('date'))}
+      ${heads.length || x.grp ? field('Building / group', `<input name="grp" list="hgrpl" value="${esc(x.grp || '')}"><datalist id="hgrpl">${heads.map(h => `<option value="${esc(h)}">`).join('')}</datalist>`) : ''}
+      <div class="f2">${field('Name / branch', inp('name'))}${field('ACU location / room', inp('loc'))}</div>
+      ${field('Service request / complaint', inp('svc', 'e.g. Not cooling, Cleaning, Water leaking'))}
+      ${field('Technical findings', inp('find', 'e.g. Dirty filter, Lack of freon'))}
+      ${field('Model', inp('model', 'e.g. Split Type, ATUQ36GNLE6'))}
+      ${field('Action taken / work done', `<textarea name="work" style="min-height:70px">${esc(x.work || '')}</textarea>`)}
+      ${field('Assigned technicians', inp('tech'))}
+      <div class="f3">${field('Qty', inp('qty'))}${field('Amount', inp('amount'))}${field('Total', inp('total'))}</div>
+      ${field('Payment status', inp('pay', 'e.g. PAID 11.24.26, FREE CHARGE, UNPAID'))}
+      ${field('Address', inp('addr'))}
+      ${x.src ? `<p class="small muted">From: ${esc(x.src)}${x.by ? ' · ' + esc(x.by) : ''}</p>` : ''}
+    </form>`;
+  }
+  const HIST_ACTS = {
+    histAdd: el => {
+      const c = el.dataset.cust || '';
+      if (!HS.idx) histLoad('');
+      openSheet(c ? 'Add line — ' + c : 'New service history line', histForm(null, c), `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="histSave">Save</button>`);
+    },
+    histEdit: el => {
+      const c = decodeURIComponent(location.hash.split('/').slice(1).join('/'));
+      const x = (HS.rows[c] || []).find(r => r.r === +el.dataset.r);
+      if (!x) return;
+      S._hEdit = x;
+      openSheet('Edit line', histForm(x, c), `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="histSave" data-r="${x.r}">Save</button>`);
+    },
+    histSave: async el => {
+      const f = formData('#fhist'), x = el.dataset.r ? S._hEdit : null;
+      if (!f.cust) return toast(tr('Write the customer'), true);
+      if (!x && !f.work && !f.svc) return toast(tr('Write the service or the work done'), true);
+      el.disabled = true; toast('Saving…', false, 60000);
+      const set = Object.assign({}, f);
+      if (!x) { set.src = 'Website'; set.by = S.me ? S.me.name : ''; }
+      try {
+        await call('recSave', {k: 'hist', r: x ? x.r : undefined, id: x ? x.id : undefined, set});
+        closeSheet(); toast('Saved ✓');
+        delete HS.rows[f.cust]; if (x && x.cust !== f.cust) delete HS.rows[x.cust];
+        await histLoad('', true);
+        if (location.hash !== '#hist/' + encodeURIComponent(f.cust)) go('hist/' + encodeURIComponent(f.cust)); else histLoad(f.cust, true);
+      } catch (e) { toast(e.message, true); el.disabled = false; }
+    },
+    histOrder: () => { S.histOld = !S.histOld; render(); },
+    histPrint: el => {
+      const c = el.dataset.cust;
+      printHtml(`<div class="doc hprint"><h2 style="margin:0 0 4px">BRIZAIR CORP — Service history</h2><div style="margin-bottom:8px"><b>${esc(c)}</b> · printed ${esc(fmtD(today(), {year: 'numeric'}))}</div>${histTable(c, true)}</div>`, true);
+    },
+    histFor: async el => {
+      const name = el.dataset.cust;
+      if (!HS.idx) { toast('Loading…', false, 20000); await histLoad(''); }
+      const t = histTabFor(name);
+      if (t) go('hist/' + encodeURIComponent(t)); else { S.q.hist = name.split(/\s+/)[0]; go('hist'); toast(tr('No exact match — check the list or add a new line')); }
+    }
   };
 
   // money
@@ -1154,7 +1311,7 @@
 
   VIEWS.more = () => `<h1>More</h1><p class="sub">Logged in as <b>${esc(S.me && S.me.name)}</b></p>
     <div class="card"><div class="list">
-      ${[['ask', 'Ask GPT', 'chat', 'c-blue'], ['materials', 'Materials for AI (upload)', 'book', 'c-violet'], ['orders', 'Orders (PO) & suppliers', 'inbox', 'c-teal'], ['money', 'Money — unpaid & payments', 'peso', 'c-amber'], ['soa', 'Service SOA — service & cleaning collection', 'doc', 'c-teal'], ['quotes', 'Quotes, invoices & forms', 'doc', 'c-red'], ['report', 'LG Monthly Report', 'chart', 'c-green'], ['activity', 'Activity', 'log', 'c-blue'], ['requests', '💡 Ask for a change / report a problem', 'help', 'c-amber'], ['help', 'Help', 'help', 'c-violet']]
+      ${[['hist', 'Service history (AS Summary)', 'log', 'c-green'], ['ask', 'Ask GPT', 'chat', 'c-blue'], ['materials', 'Materials for AI (upload)', 'book', 'c-violet'], ['orders', 'Orders (PO) & suppliers', 'inbox', 'c-teal'], ['money', 'Money — unpaid & payments', 'peso', 'c-amber'], ['soa', 'Service SOA — service & cleaning collection', 'doc', 'c-teal'], ['quotes', 'Quotes, invoices & forms', 'doc', 'c-red'], ['report', 'LG Monthly Report', 'chart', 'c-green'], ['activity', 'Activity', 'log', 'c-blue'], ['requests', '💡 Ask for a change / report a problem', 'help', 'c-amber'], ['help', 'Help', 'help', 'c-violet']]
         .map(x => `<button class="item" data-go="${x[0]}"><span class="qi ${x[3]}" style="width:38px;height:38px">${ic(x[2])}</span><span class="grow t">${x[1]}</span>${ic('right')}</button>`).join('')}
       <button class="item" data-act="lang"><span class="qi c-blue" style="width:38px;height:38px"><b class="noi18n">A/가</b></span><span class="grow t">Language</span><span class="muted small noi18n">${lang() === 'ko' ? '한국어 → English' : 'English → 한국어'}</span></button>
       <button class="item" data-act="openSheet"><span class="qi c-teal" style="width:38px;height:38px">${ic('sheet')}</span><span class="grow t">Open Google Sheet</span>${ic('right')}</button>
@@ -2242,9 +2399,10 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.t && Date.now() - (S._lastRefresh || 0) > 120000) { S._lastRefresh = Date.now(); refresh(true); } });
 
   /** one-time "What's new" popup — change NOTICE.id to show a new one; each phone shows it until "Got it" */
-  const NOTICE = {id: '2026-11-19', who: ['Ladie'], title: 'What’s new (Nov 19)', items: [
-    ['📅 Not finished today? Continue another day', 'Open the job → “📅 Move / continue another day” → pick the day → Why: “Continue cleaning”. The new day’s job is made for you (same customer, units). No need to set Pending and add a new job.'],
-    ['⏳ Pending = waiting', 'Use Pending only when you are waiting for parts, customer or approval and there is no date yet.']]};
+  const NOTICE = {id: '2026-11-24', who: ['Ladie', 'Sir Kim'], title: 'What’s new (Nov 24)', items: [
+    ['📋 Service history = your AS Summary Report', 'Customers → “Service history”. Tap a customer name → all past services in one table (date, complaint, findings, model, work done, technicians, amount, payment). Your AS SUMMARY REPORT is already inside.'],
+    ['➕ Add or fix a line', '“Add line” for a new service, or tap any line to edit it. Jobs you mark Done in the Schedule also show here (green), so you don’t need to type them twice.'],
+    ['🖨️ Print', '“Print / PDF” prints the table for the customer.']]};
   const noticeForMe = () => !NOTICE.who || (S.me && NOTICE.who.some(w => lc(S.me.name).startsWith(lc(w))));
   /** shows after login / start; if another window (help, a form) is open or she is typing, it waits and tries again */
   function showNotice(tries) {
@@ -2253,11 +2411,11 @@
     const ae = document.activeElement, typing = ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName) && !$('.pad');
     if ($('.veil') || typing || !S.D) { if ((tries || 0) < 200) S._noticeT = setTimeout(() => showNotice((tries || 0) + 1), 3000); return; }
     openSheet(NOTICE.title, `<div class="list">${NOTICE.items.map(x => `<div class="item"><span class="grow"><div class="t">${x[0]}</div><div class="s" style="white-space:normal">${x[1]}</div></span></div>`).join('')}</div>`,
-      `<div class="btns" style="width:100%"><button class="btn" data-act="noticeOrders">${ic('inbox')} Orders</button><button class="btn primary" data-act="noticeOk">Got it</button></div>`);
+      `<div class="btns" style="width:100%"><button class="btn" data-act="noticeOrders">${ic('log')} Open Service history</button><button class="btn primary" data-act="noticeOk">Got it</button></div>`);
   }
   ACT.noticeOk = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); setTimeout(showSurvey, 600); };
-  ACT.noticeOrders = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); go('orders'); };
-  Object.assign(ACT, REQ_ACTS);
+  ACT.noticeOrders = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); go('hist'); };
+  Object.assign(ACT, REQ_ACTS, HIST_ACTS);
 
   function start() {
     shell();
