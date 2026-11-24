@@ -34,4 +34,7 @@ Evan의 말: "레이디가 쓰게 편하게 최적화를 계속 해주는게 좋
 - (11/18 완료: 청소 여러 대 한 번에 저장 cleaningDone units[] + PO 입고 'Don’t add to stock' noStock = 서버 v2.3 배포 버전 15, 사이트 v25. REQUESTS BRZ-Q-20261118-95996 Done)
 - (11/18 Sir Kim 설문) 매일 입출금 장부를 사이트로 + 화면·표를 기존 엑셀 양식처럼 보기 쉽게. 큰 변경이라 Evan 결정 필요(장부 엑셀 업로드 요청해 둠).
 
+- (11/24) 서비스 입금 중복 막기(서버): jobPay가 Paid+금액 > Charge면 거절. 사이트 v29는 저장 직전 boot로 다시 확인만 함(몇 초 차이 동시 저장은 못 막음). Gemik Clark Paid ₱11,000→5,500 정정은 Evan 승인 대기.
+- 시각 주의: 집 PC Git Bash `TZ=Asia/Manila date`는 UTC로 나옴 → `python3 -c` zoneinfo로 마닐라 시각 확인.
+
 - (11/18 대기) Sir Kim 장부 엑셀이 KNOWLEDGE에 새로 올라오면 → Evan에게 '장부 엑셀 올라옴, 개편안 만들까요' 보고(Evan 승인 범위: 양식대로 미리보기 → 승인 후 적용). HS09 원가는 ₱20,000 보류 중(Ladie 답 대기), 답이 REQUESTS에 오면 Evan에게 보고 후 UNITS 수정.
