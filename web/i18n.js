@@ -4,6 +4,9 @@
   'use strict';
   const KO = {
     // service history (Nov 24)
+    'What’s new (Nov 24)': '새로 바뀐 것 (11/24)', '💵 Payment saved only once': '💵 입금은 한 번만 저장돼요',
+    'Ladie and Jheena both saved Gemik Clark’s ₱5,500 today, so it shows as ₱11,000 paid. From now on, “Save payment” checks the latest balance first. If someone already saved it, you will see “Already paid”.': '오늘 Gemik Clark ₱5,500을 Ladie와 Jheena가 둘 다 저장해서 ₱11,000 받은 것으로 보여요. 이제 “입금 저장”을 누르면 최신 잔액을 먼저 확인해요. 누가 이미 저장했으면 “이미 받았어요”가 나와요.',
+    'Checking the latest balance…': '최신 잔액 확인 중…',
     'Service history': '서비스 기록', 'Service history (AS Summary)': '서비스 기록 (AS Summary)', 'New line': '새 줄', 'Add line': '줄 추가', 'Edit line': '줄 수정',
     'Newest first': '최신순', 'Oldest first': '오래된순', 'Units & jobs': '기계·일정', 'Open Service history': '서비스 기록 열기',
     'Same as the AS Summary Report: tap a customer → all past services in one table.': 'AS Summary Report와 같아요: 손님을 누르면 지난 서비스가 한 표로 나와요.',
@@ -309,7 +312,7 @@
     [/^Pending jobs \(no date yet\): (\d+)$/, '대기 일정 (날짜 없음): $1'], [/^Service \/ cleaning not billed yet: (\d+)$/, '청구 안 한 AS·청소: $1'],
     [/^Pending \((\d+)\)$/, '대기 ($1)'], [/^Unpaid \((\d+)\)$/, '미수 ($1)'], [/^Not billed \((\d+)\)$/, '청구 안 함 ($1)'], [/^Not billed$/, '청구 안 함'],
     [/^Charge — (.+)$/, '청구 금액 — $1'], [/^Payment — (.+)$/, '입금 — $1'], [/^(₱[\d,.]+) due$/, '$1 남음'], [/^Scheduled on (.+) ✓$/, '$1 일정 등록 ✓'],
-    [/^More than the balance \((.+)\)$/, '남은 돈($1)보다 많아요'], [/^Charge is less than already paid \((.+)\)$/, '이미 받은 돈($1)보다 적어요'], [/^Already paid (.+) — change the charge instead$/, '이미 $1 받았어요 — 금액을 바꾸세요'], [/^Sent\. GPT will answer in about 20–60 seconds…$/, '보냈어요. GPT가 20~60초 안에 답해요…'],
+    [/^More than the balance \((.+)\)$/, '남은 돈($1)보다 많아요'], [/^Already paid \((.+)\) — someone saved this payment already$/, '이미 받았어요($1) — 누가 이미 저장했어요'], [/^Balance changed just now: (.+) left\. Check the amount$/, '방금 잔액이 바뀌었어요: $1 남음. 금액을 확인하세요'],[/^Charge is less than already paid \((.+)\)$/, '이미 받은 돈($1)보다 적어요'], [/^Already paid (.+) — change the charge instead$/, '이미 $1 받았어요 — 금액을 바꾸세요'], [/^Sent\. GPT will answer in about 20–60 seconds…$/, '보냈어요. GPT가 20~60초 안에 답해요…'],
     [/^GPT is reading the sheet…$/, 'GPT가 시트를 읽는 중…'],
     [/^GPT reached its ChatGPT usage limit\. Please ask again after (.+)\.$/, 'GPT 사용 한도에 걸렸어요. $1 이후에 다시 물어봐 주세요.'], [/^GPT reached its ChatGPT usage limit\. Please ask again later\.$/, 'GPT 사용 한도에 걸렸어요. 잠시 뒤에 다시 물어봐 주세요.'], [/^Waiting — Sir Kim's PC is offline\. It will answer when the PC is on\.$/, '대기 중 — 대표님 컴퓨터가 꺼져 있어요. 켜지면 답해요.'], [/^No jobs\. ?$/, '일정 없음. '], [/^\+ Add a job on this day$/, '+ 이날 일정 추가']
   ];
