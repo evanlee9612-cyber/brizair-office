@@ -195,6 +195,10 @@
       const skip = !!b.noStock && /unit|part/i.test(o.kind);
       if (hit && !skip && /unit|part/i.test(o.kind)) (/part/i.test(o.kind) ? D.partLog : D.unitLog).push({r: ++seq, date: b.date, item: o.item, dir: 'IN', qty: b.qty, party: o.supplier, ref: o.po, by: me.name, notes: 'Received (order)'});
       log(me, 'Order received', `${b.qty} × ${o.item}` + (skip ? ' (stock not changed)' : '')); recalc(D); persist(); return {ok: true, stock: hit && !skip ? o.item : '', noStock: skip};
+    } else if (a === 'itemPrice') {
+      const L = b.kind === 'part' ? D.parts : D.units, x = L.find(k => k.r === b.r && k.item === b.item) || err('Not found. Please refresh.');
+      ['srp', 'price', 'cost'].forEach(k => { if (b[k] !== undefined && b[k] !== '') x[k] = +String(b[k]).replace(/,/g, ''); });
+      log(me, 'Price changed', b.item);
     } else if (a === 'addItem') {
       const x = b.item, L = x.kind === 'part' ? D.parts : D.units;
       if (L.some(k => k.item === x.item)) err('Already in the list: ' + x.item);

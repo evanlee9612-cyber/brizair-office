@@ -1985,7 +1985,24 @@
           ${x.notes ? `<dt>Notes</dt><dd>${esc(x.notes)}</dd>` : ''}</dl>
         ${kind === 'unit' && resOpen().some(r => r.item === x.item) ? `<h2 style="margin-bottom:4px">Reserved for projects</h2><div class="list" style="margin-bottom:12px">${resOpen().filter(r => r.item === x.item).map(r => `<button class="item" data-act="res" data-r="${r.r}"><span class="pill p-PARTIAL">${r.qty}</span><span class="grow"><div class="t small clip">${esc(r.party)}</div><div class="s clip">${esc([r.ref, fmtD(r.date, {year: 'numeric'})].filter(Boolean).join(' · '))}</div></span></button>`).join('')}</div>` : ''}
         <h2 style="margin-bottom:4px">Recent moves</h2><div class="list">${moves.map(l => `<div class="item"><span class="pill ${l.dir === 'IN' ? 'p-Done' : 'p-UNPAID'}">${l.dir} ${l.qty}</span><span class="grow"><div class="s">${esc([fmtD(l.date, {year: 'numeric'}), l.party, l.ref, l.by].filter(Boolean).join(' · '))}</div></span></div>`).join('') || '<div class="empty">No moves recorded</div>'}</div>`,
-        `${kind === 'unit' ? `<button class="btn" data-act="resNew" data-item="${esc(x.item)}">${ic('plus')} Reserve</button>` : ''}<button class="btn green" data-act="move" data-kind="${kind}" data-item="${esc(x.item)}" data-dir="IN">${ic('inbox')} IN</button><button class="btn red" data-act="move" data-kind="${kind}" data-item="${esc(x.item)}" data-dir="OUT">${ic('outbox')} OUT</button>`);
+        `<button class="btn" data-act="priceEdit" data-kind="${kind}" data-r="${x.r}">₱ Edit price</button>${kind === 'unit' ? `<button class="btn" data-act="resNew" data-item="${esc(x.item)}">${ic('plus')} Reserve</button>` : ''}<button class="btn green" data-act="move" data-kind="${kind}" data-item="${esc(x.item)}" data-dir="IN">${ic('inbox')} IN</button><button class="btn red" data-act="move" data-kind="${kind}" data-item="${esc(x.item)}" data-dir="OUT">${ic('outbox')} OUT</button>`);
+    },
+    priceEdit: el => {
+      const kind = el.dataset.kind, x = stockList(kind).find(i => i.r === +el.dataset.r); if (!x) return;
+      S.priceX = {kind, x};
+      const f1 = kind === 'part' ? ['price', 'Customer price (w/ VAT)'] : ['srp', 'SRP (customer price)'], f2 = kind === 'part' ? ['cost', 'LG cost'] : ['cost', 'Cost (our price)'];
+      const val = v => v === null || v === undefined ? '' : v;
+      openSheet('Edit price — ' + x.item, `<form id="fprice">
+        <div class="f2">${field(f1[1], `<input name="${f1[0]}" inputmode="decimal" value="${esc(val(x[f1[0]]))}">`)}${field(f2[1], `<input name="${f2[0]}" inputmode="decimal" value="${esc(val(x[f2[0]]))}">`)}</div>
+        ${field('Why (optional)', '<input name="why" placeholder="e.g. new PO price CSAS 2026-08">')}
+        <p class="small muted">Only the price changes. Stock qty and old IN / OUT records stay the same. The change is saved in Activity.</p></form>`,
+        `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="priceSave">Save</button>`);
+    },
+    priceSave: async el => {
+      const {kind, x} = S.priceX || {}; if (!x) return;
+      const f = formData('#fprice');
+      el.disabled = true;
+      try { await save('itemPrice', Object.assign({kind, r: x.r, item: x.item}, f), 'Price saved ✓'); } catch (e) { el.disabled = false; }
     },
     otherDone: () => { S.otherDone = !S.otherDone; render(); },
     otherEdit: el => {
