@@ -12,7 +12,7 @@
  * AI answers: questions go to tab ASK. Sir Kim's PC (ask_relay.py + Codex/ChatGPT) picks them up with
  *   RELAY_KEY (Script Property, set once by Evan) and writes the answer back. Materials: tab KNOWLEDGE + Drive folder.
  */
-var VERSION = '2.6';
+var VERSION = '2.7';
 var SHEET_ID = '1jahKP1N3VVmiBqSXlr3xbmJxORVAWFVQNtxMLyqbCKE';
 var TZ = 'Asia/Manila';
 var SESSION_DAYS = 90;
@@ -466,7 +466,7 @@ function moves_(name) {
     var item = s_(r[col_(T, 'item')]); if (!item) return null;
     return {r: i + 1, date: d_(r[col_(T, 'date')]), item: item, dir: s_(r[col_(T, 'in / out')]).toUpperCase(),
       qty: n_(r[col_(T, 'qty')]) || 0, party: s_(r[col_(T, 'customer / supplier')]), ref: s_(r[col_(T, 'po / invoice #')]),
-      by: s_(r[col_(T, 'by')]), notes: s_(r[col_(T, 'notes')])};
+      by: s_(r[col_(T, 'by')]), notes: s_(r[col_(T, 'notes')]), cost: n_(r[colOpt_(T, norm_(MOVE_COST))]), price: n_(r[colOpt_(T, norm_(MOVE_PRICE))])};
   });
 }
 
@@ -738,22 +738,27 @@ function orderRecv_(req, me) {
 }
 /** new model / part in the stock list (IN / OUT / NOW formulas copied from the row above) */
 /** change price of a stock model / part (SRP·cost or customer price·LG cost). Row + item name must match. Old → new goes to APP LOG */
+/** change SRP/cost (unit) or customer price/LG cost (part) on row r of UNITS/PARTS. Returns list of "Cost 20000 → 23690" changes (call inside lock) */
+function setPrice_(part, T, r, vals) {
+  var cols = part ? [['price', 'customer price w/ vat', 'Customer price'], ['cost', 'lg cost', 'LG cost']] : [['srp', 'srp', 'SRP'], ['cost', 'cost', 'Cost']];
+  var ch = [];
+  cols.forEach(function (c) {
+    if (vals[c[0]] === undefined || vals[c[0]] === '' || vals[c[0]] === null) return;
+    var v = n_(String(vals[c[0]]).replace(/,/g, ''));
+    if (v === null || v < 0 || v > 10000000) throw bad_('Check the ' + c[2]);
+    var ci = col_(T, c[1]), old = n_(T.vals[r - 1][ci]);
+    if (old === v) return;
+    T.sh.getRange(r, ci + 1).setValue(v);
+    ch.push(c[2] + ' ' + (old === null ? '-' : old) + ' → ' + v);
+  });
+  return ch;
+}
 function itemPrice_(req, me) {
   var part = req.kind === 'part';
   return withLock_(function () {
     var T = table_(part ? 'PARTS' : 'UNITS'), r = +req.r;
     if (!(r >= 2 && r <= T.vals.length) || s_(T.vals[r - 1][col_(T, 'item')]) !== String(req.item || '')) throw bad_('Not found. Please refresh.');
-    var cols = part ? [['price', 'customer price w/ vat', 'Customer price'], ['cost', 'lg cost', 'LG cost']] : [['srp', 'srp', 'SRP'], ['cost', 'cost', 'Cost']];
-    var ch = [];
-    cols.forEach(function (c) {
-      if (req[c[0]] === undefined || req[c[0]] === '') return;
-      var v = n_(String(req[c[0]]).replace(/,/g, ''));
-      if (v === null || v < 0 || v > 10000000) throw bad_('Check the ' + c[2]);
-      var ci = col_(T, c[1]), old = n_(T.vals[r - 1][ci]);
-      if (old === v) return;
-      T.sh.getRange(r, ci + 1).setValue(v);
-      ch.push(c[2] + ' ' + (old === null ? '-' : old) + ' → ' + v);
-    });
+    var ch = setPrice_(part, T, r, req);
     if (!ch.length) return {ok: true, same: true};
     done_(me, 'Price changed', String(req.item) + ' · ' + ch.join(', ') + (req.why ? ' · ' + clip_(req.why, 120) : ''), '💲');
     return {ok: true};
@@ -889,23 +894,44 @@ function jobPay_(req, me) {
   });
 }
 
+var MOVE_COST = 'Cost each (원가)', MOVE_PRICE = 'SRP / price each (손님가)';
+/** IN-OUT tabs: add the 2 price columns at the end if missing (old rows stay empty) */
+function movePriceCols_(T) {
+  var add = [MOVE_COST, MOVE_PRICE].filter(function (h) { return colOpt_(T, h) < 0; });
+  if (!add.length) return T;
+  T.sh.getRange(1, T.lc + 1, 1, add.length).setValues([add]).setFontWeight('bold');
+  return table_(T.sh.getName());
+}
 function stockMove_(req, me) {
-  var m = req.move || {};
-  var tab = m.kind === 'part' ? 'PART IN-OUT' : 'UNIT IN-OUT', list = m.kind === 'part' ? 'PARTS' : 'UNITS';
+  var m = req.move || {}, part = m.kind === 'part';
+  var tab = part ? 'PART IN-OUT' : 'UNIT IN-OUT', list = part ? 'PARTS' : 'UNITS';
   var qty = Math.round(+m.qty);
   if (!(qty > 0 && qty < 10000)) throw bad_('Qty must be 1 or more');
   if (m.dir !== 'IN' && m.dir !== 'OUT') throw bad_('Choose IN or OUT');
+  var num = function (v, what) {
+    if (v === undefined || v === null || String(v).trim() === '') return '';
+    var x = n_(String(v).replace(/[₱,\s]/g, ''));
+    if (x === null || x < 0 || x > 10000000) throw bad_('Check the ' + what);
+    return x;
+  };
+  var cost = num(m.cost, part ? 'LG cost' : 'cost'), price = num(m.price, part ? 'customer price' : 'SRP');
   return withLock_(function () {
-    var L = table_(list), ic = col_(L, 'item'), found = false;
-    for (var i = 1; i < L.vals.length; i++) if (s_(L.vals[i][ic]) === m.item) { found = true; break; }
-    if (!found) throw bad_('Item not found in ' + list + ': ' + m.item);
+    var L = table_(list), ic = col_(L, 'item'), lr = 0;
+    for (var i = 1; i < L.vals.length; i++) if (s_(L.vals[i][ic]) === m.item) { lr = i + 1; break; }
+    if (!lr) throw bad_('Item not found in ' + list + ': ' + m.item);
     var T = table_(tab);
+    if (cost !== '' || price !== '') T = movePriceCols_(T);
     var row = lastRowOf_(T, col_(T, 'item')) + 1;
-    writeRow_(T, row, {'date': toDate_(m.date || today_()), 'item': m.item, 'in / out': m.dir, 'qty': qty,
-      'customer / supplier': clip_(m.party, 120), 'po / invoice #': clip_(m.ref, 60), 'by': me.name, 'notes': clip_(m.notes, 300)});
-    done_(me, (m.kind === 'part' ? 'Part ' : 'Unit ') + m.dir, qty + ' × ' + m.item + (m.party ? ' · ' + m.party : '') + (m.ref ? ' · ' + m.ref : ''),
-      m.dir === 'IN' ? '📦' : '🚚');
-    return {ok: true, r: row};
+    var o = {'date': toDate_(m.date || today_()), 'item': m.item, 'in / out': m.dir, 'qty': qty,
+      'customer / supplier': clip_(m.party, 120), 'po / invoice #': clip_(m.ref, 60), 'by': me.name, 'notes': clip_(m.notes, 300)};
+    o[norm_(MOVE_COST)] = cost; o[norm_(MOVE_PRICE)] = price;
+    writeRow_(T, row, o);
+    var ch = [];
+    if (m.dir === 'IN' && m.setPrice) ch = setPrice_(part, L, lr, part ? {cost: cost, price: price} : {cost: cost, srp: price});
+    var pr = [cost !== '' ? 'cost ₱' + cost : '', price !== '' ? (part ? 'price ₱' : 'SRP ₱') + price : ''].filter(function (x) { return x; }).join(' / ');
+    done_(me, (part ? 'Part ' : 'Unit ') + m.dir, qty + ' × ' + m.item + (m.party ? ' · ' + m.party : '') + (m.ref ? ' · ' + m.ref : '') + (pr ? ' · ' + pr + ' each' : '')
+      + (ch.length ? ' · price list updated: ' + ch.join(', ') : ''), m.dir === 'IN' ? '📦' : '🚚');
+    return {ok: true, r: row, priceChanged: ch.length > 0};
   });
 }
 

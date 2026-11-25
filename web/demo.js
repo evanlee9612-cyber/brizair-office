@@ -175,7 +175,8 @@
       log(me, 'Job updated', j.customer + ' → ' + Object.entries(b.set).map(e => e.join(': ')).join(', '));
     } else if (a === 'stockMove') {
       const m = b.move, L = m.kind === 'part' ? D.partLog : D.unitLog;
-      L.push({r: ++seq, date: m.date, item: m.item, dir: m.dir, qty: +m.qty, party: m.party, ref: m.ref, by: me.name, notes: m.notes});
+      L.push({r: ++seq, date: m.date, item: m.item, dir: m.dir, qty: +m.qty, party: m.party, ref: m.ref, by: me.name, notes: m.notes, cost: m.cost === '' || m.cost == null ? null : +m.cost, price: m.price === '' || m.price == null ? null : +m.price});
+      if (m.dir === 'IN' && m.setPrice) { const x = (m.kind === 'part' ? D.parts : D.units).find(k => k.item === m.item); if (m.cost !== '') x.cost = +m.cost; if (m.price !== '') x[m.kind === 'part' ? 'price' : 'srp'] = +m.price; }
       log(me, (m.kind === 'part' ? 'Part ' : 'Unit ') + m.dir, `${m.qty} × ${m.item}${m.party ? ' · ' + m.party : ''}`);
     } else if (a === 'resAdd') {
       const x = b.res; D.unitRes = D.unitRes || [];
