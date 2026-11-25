@@ -3,7 +3,8 @@
  "already_done": [
   "HSN09ISB/HSU09ISB cost 20,000 -> 23,690 (Ladie 11/24 15:55 asked). New site button Stock > model > 'Edit price' (server v2.5 deployment 17, site v29). Ladie told to change SRP herself.",
   "Ladie 11/24 15:52-15:53 photos = screenshots about HS09 price only (telegram_inbox/2026-11-24/ladie2/), not the requested files",
-  "Ladie 11/25 14:49 asked to add price & SRP in Unit in/out -> DONE ~15:00: server v2.7 (deployment 20) + site v31, Ladie told. Do not redo."
+  "Ladie 11/25 14:49 asked to add price & SRP in Unit in/out -> DONE ~15:00: server v2.7 (deployment 20) + site v31, Ladie told. Do not redo.",
+  "Ladie 11/25 15:02 could not add new model HSU-09PSV35-W in Unit in/out -> DONE site v32 (+ Add new model in the in/out form), Ladie told. Check her real entry in UNITS / UNIT IN-OUT."
  ],
  "waiting_for": [
   "newest AS Summary + Besco/Clarkhills/Philexcel/Sinyang",
