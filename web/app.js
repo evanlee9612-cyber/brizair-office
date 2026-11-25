@@ -1623,6 +1623,11 @@
     return `<form id="fmove">
       ${field('What?', `<div class="seg" style="width:100%"><button type="button" style="flex:1" class="${kind === 'unit' ? 'on' : ''}" data-act="moveKind" data-kind="unit">Aircon unit</button><button type="button" style="flex:1" class="${kind === 'part' ? 'on' : ''}" data-act="moveKind" data-kind="part">Part</button></div>`)}
       <div class="f pick"><label>${kind === 'part' ? 'Part' : 'Model'} *</label><input id="m_item" autocomplete="off" placeholder="Type to search…" value="${esc(item || '')}"><div class="pick-list hidden" id="m_pick"></div><div class="hint" id="m_now">${item ? 'In stock now: ' + ((list.find(x => x.item === item) || {}).now ?? '?') : ''}</div></div>
+      <div id="m_new" class="hidden" style="margin:-4px 0 12px;padding:10px 12px;border-radius:10px;background:#fff7e6;border:1px solid #f5d08a">
+        <div class="small" style="margin-bottom:8px"><b>New ${kind === 'part' ? 'part' : 'model'}</b> — not in the stock list yet. It will be added when you save.</div>
+        ${kind === 'part' ? `<div class="f2">${field('Part no.', '<input name="npn" autocapitalize="characters">')}${field('Group', `<input name="ngroup" list="dlgrp3">`)}</div>${dl('dlgrp3', Array.from(new Set(list.map(x => x.group).filter(Boolean))))}`
+          : `<div class="f2">${field('Type', `<input name="ntype" list="dltype3" placeholder="e.g. Split Type">`)}${field('HP', '<input name="nhp" placeholder="e.g. 1hp">')}</div>${dl('dltype3', Array.from(new Set(list.map(x => x.type).filter(Boolean))))}`}
+      </div>
       ${field('IN or OUT *', choice('dir', ['IN', 'OUT'], dir || '', 'inout'), 'IN = came in (delivery from supplier) · OUT = went out (installed / sold / used)')}
       <div class="f2">${field('Qty *', `<input name="qty" inputmode="numeric" value="1" required>`)}${field('Date', `<input type="date" name="date" value="${today()}">`)}</div>
       ${field('Customer / supplier', `<input name="party" list="dlcust2" autocomplete="off">`)}${dl('dlcust2', custNames())}
@@ -1631,6 +1636,15 @@
       <label class="row small hidden" id="m_upd" style="gap:8px;margin:-4px 0 12px;align-items:flex-start"><input type="checkbox" name="setPrice" value="1" checked style="width:20px;height:20px;flex:none"><span id="m_updt"></span></label>
       ${field('Notes', `<input name="notes">`)}
     </form>`;
+  }
+  /** typed name not in the stock list → show the "new model" box */
+  function moveNew(v) {
+    const typed = $('#m_item', v).value.trim(), known = stockList(S.mv.kind).find(x => lc(x.item) === lc(typed));
+    if (known && !S.mv.item) { S.mv.item = known.item; $('#m_now', v).textContent = 'In stock now: ' + known.now; movePrice(v, known, true); }
+    const isNew = !!typed && !known;
+    $('#m_new', v).classList.toggle('hidden', !isNew);
+    if (isNew) $('#m_now', v).textContent = '';
+    return isNew;
   }
   /** price boxes: fill with the model's price; on IN, if changed, offer to update the price list */
   function movePrice(v, x, fill) {
@@ -1652,10 +1666,16 @@
     const kind = S.mv.kind;
     picker($('#m_item', v), $('#m_pick', v), q => {
       q = lc(q);
-      return stockList(kind).filter(x => !q || modelHit([x.item, x.type, x.hp, x.pn, x.group].join(' '), q)).slice(0, 40)
+      const typed = $('#m_item', v).value.trim();
+      const hits = stockList(kind).filter(x => !q || modelHit([x.item, x.type, x.hp, x.pn, x.group].join(' '), q)).slice(0, 40)
         .map(x => ({t: x.item, s: [kind === 'part' ? x.pn || x.group : x.type, x.hp, 'stock ' + x.now, x.cost ? (kind === 'part' ? 'LG ' + peso(x.cost) : 'cost ' + peso(x.cost, 0)) : ''].filter(Boolean).join(' · '), v: x}));
-    }, o => { $('#m_item', v).value = o.t; S.mv.item = o.t; $('#m_now', v).textContent = 'In stock now: ' + o.v.now; movePrice(v, o.v, true); });
-    $('#m_item', v).addEventListener('input', () => { S.mv.item = ''; movePrice(v, null, true); });
+      if (typed && !stockList(kind).some(x => lc(x.item) === lc(typed))) hits.push({t: '＋ Add new ' + (kind === 'part' ? 'part' : 'model') + ': ' + typed, s: 'Not in the list yet — it will be added when you save', v: null, add: typed});
+      return hits;
+    }, o => {
+      if (o.add) { $('#m_item', v).value = o.add; S.mv.item = ''; moveNew(v); return; }
+      $('#m_item', v).value = o.t; S.mv.item = o.t; $('#m_now', v).textContent = 'In stock now: ' + o.v.now; moveNew(v); movePrice(v, o.v, true);
+    });
+    $('#m_item', v).addEventListener('input', () => { S.mv.item = ''; movePrice(v, null, true); moveNew(v); });
     const cur = () => stockList(kind).find(x => x.item === S.mv.item);
     if (S.mv.item) movePrice(v, cur(), true);
     $('#fmove', v).addEventListener('input', e => { if (e.target.id !== 'm_item') movePrice(v, cur(), false); });
@@ -2290,19 +2310,32 @@
     moveKind: el => { closeSheet(); openMove(el.dataset.kind); },
     saveMove: async el => {
       const f = formData('#fmove');
-      const item = S.mv.item || $('#m_item').value.trim();
-      const list = stockList(S.mv.kind);
-      if (!list.some(x => x.item === item)) return toast('Choose the ' + (S.mv.kind === 'part' ? 'part' : 'model') + ' from the list', true);
+      const kind = S.mv.kind, word = kind === 'part' ? 'part' : 'model';
+      const typed = $('#m_item').value.trim(), list = stockList(kind);
+      const known = list.find(x => x.item === S.mv.item) || list.find(x => lc(x.item) === lc(typed));
+      const item = known ? known.item : typed;
+      if (!item) return toast('Type the ' + word, true);
       if (!f.dir) return toast('Choose IN or OUT', true);
       const qty = +f.qty;
       if (!(qty > 0)) return toast('Qty must be 1 or more', true);
-      const now = (list.find(x => x.item === item) || {}).now || 0;
-      if (f.dir === 'OUT' && qty > now && !confirmBox(`Stock is only ${now}. Record OUT ${qty} anyway?`)) return;
       const pnum = t => String(t || '').replace(/[₱,\s]/g, '');
       for (const k of ['cost', 'price']) { f[k] = pnum(f[k]); if (f[k] !== '' && (isNaN(+f[k]) || +f[k] < 0)) return toast('Price must be a number', true); }
-      f.setPrice = f.dir === 'IN' && !$('#m_upd').classList.contains('hidden') && !!f.setPrice;
+      const nw = {type: f.ntype, hp: f.nhp, pn: f.npn, group: f.ngroup}; ['ntype', 'nhp', 'npn', 'ngroup'].forEach(k => delete f[k]);
+      if (!known) {
+        if (!confirmBox(`"${item}" is not in the stock list yet. Add it as a new ${word} and save this ${f.dir}?`)) return;
+        el.disabled = true; toast('Adding new ' + word + '…', false, 60000);
+        const add = kind === 'part' ? {kind, item, pn: nw.pn || '', group: nw.group || '', price: f.price, cost: f.cost, notes: 'Added from ' + f.dir + ' ' + (f.ref || '')}
+          : {kind, item, type: nw.type || '', hp: nw.hp || '', srp: f.price, cost: f.cost, supplier: f.dir === 'IN' ? f.party : '', po: f.ref, notes: 'Added from ' + f.dir + (f.ref ? ' · ' + f.ref : '')};
+        try { await call('addItem', {item: add}); }
+        catch (e) { if (!/already in the list/i.test(e.message)) { el.disabled = false; return toast(e.message, true); } }
+        f.setPrice = false;
+      } else {
+        const now = known.now || 0;
+        if (f.dir === 'OUT' && qty > now && !confirmBox(`Stock is only ${now}. Record OUT ${qty} anyway?`)) return;
+      }
+      if (known) f.setPrice = f.dir === 'IN' && !$('#m_upd').classList.contains('hidden') && !!f.setPrice;
       el.disabled = true;
-      try { await save('stockMove', {move: Object.assign(f, {kind: S.mv.kind, item})}, `${f.dir} ${qty} × ${item} ✓${f.setPrice ? ' · price updated' : ''}`); } catch (e) { el.disabled = false; }
+      try { await save('stockMove', {move: Object.assign(f, {kind, item})}, `${known ? '' : 'New ' + word + ' added · '}${f.dir} ${qty} × ${item} ✓${f.setPrice ? ' · price updated' : ''}`); } catch (e) { el.disabled = false; }
     },
     pay: el => openSheet('Payment received', payForm(el.dataset.p), `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="savePay">Save payment</button>`),
     savePay: async el => {
