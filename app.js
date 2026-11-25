@@ -1627,8 +1627,21 @@
       <div class="f2">${field('Qty *', `<input name="qty" inputmode="numeric" value="1" required>`)}${field('Date', `<input type="date" name="date" value="${today()}">`)}</div>
       ${field('Customer / supplier', `<input name="party" list="dlcust2" autocomplete="off">`)}${dl('dlcust2', custNames())}
       ${field('PO / invoice #', `<input name="ref">`)}
+      <div class="f2">${field(kind === 'part' ? 'LG cost each (₱)' : 'Cost each (₱)', `<input name="cost" id="m_cost" inputmode="decimal" placeholder="our price">`)}${field(kind === 'part' ? 'Customer price each (₱)' : 'SRP each (₱)', `<input name="price" id="m_price" inputmode="decimal" placeholder="customer price">`)}</div>
+      <label class="row small hidden" id="m_upd" style="gap:8px;margin:-4px 0 12px;align-items:flex-start"><input type="checkbox" name="setPrice" value="1" checked style="width:20px;height:20px;flex:none"><span id="m_updt"></span></label>
       ${field('Notes', `<input name="notes">`)}
     </form>`;
+  }
+  /** price boxes: fill with the model's price; on IN, if changed, offer to update the price list */
+  function movePrice(v, x, fill) {
+    const kind = S.mv.kind, pk = kind === 'part' ? 'price' : 'srp';
+    const c = $('#m_cost', v), p = $('#m_price', v);
+    if (fill) { c.value = x && x.cost != null ? x.cost : ''; p.value = x && x[pk] != null ? x[pk] : ''; }
+    const dir = ($('input[name=dir]:checked', v) || {}).value || '';
+    const num = el => { const t = el.value.replace(/[₱,\s]/g, ''); return t === '' || isNaN(+t) ? null : +t; };
+    const diff = x && dir === 'IN' && ((num(c) !== null && num(c) !== x.cost) || (num(p) !== null && num(p) !== x[pk]));
+    $('#m_upd', v).classList.toggle('hidden', !diff);
+    if (diff) $('#m_updt', v).textContent = `Also change the price list to this (now: cost ${x.cost != null ? peso(x.cost, 0) : '—'} / ${kind === 'part' ? 'price' : 'SRP'} ${x[pk] != null ? peso(x[pk], 0) : '—'})`;
   }
   function openMove(kind, item, dir) {
     S.mv = {kind, item: item || ''};
@@ -1641,8 +1654,12 @@
       q = lc(q);
       return stockList(kind).filter(x => !q || modelHit([x.item, x.type, x.hp, x.pn, x.group].join(' '), q)).slice(0, 40)
         .map(x => ({t: x.item, s: [kind === 'part' ? x.pn || x.group : x.type, x.hp, 'stock ' + x.now, x.cost ? (kind === 'part' ? 'LG ' + peso(x.cost) : 'cost ' + peso(x.cost, 0)) : ''].filter(Boolean).join(' · '), v: x}));
-    }, o => { $('#m_item', v).value = o.t; S.mv.item = o.t; $('#m_now', v).textContent = 'In stock now: ' + o.v.now; });
-    $('#m_item', v).addEventListener('input', () => { S.mv.item = ''; });
+    }, o => { $('#m_item', v).value = o.t; S.mv.item = o.t; $('#m_now', v).textContent = 'In stock now: ' + o.v.now; movePrice(v, o.v, true); });
+    $('#m_item', v).addEventListener('input', () => { S.mv.item = ''; movePrice(v, null, true); });
+    const cur = () => stockList(kind).find(x => x.item === S.mv.item);
+    if (S.mv.item) movePrice(v, cur(), true);
+    $('#fmove', v).addEventListener('input', e => { if (e.target.id !== 'm_item') movePrice(v, cur(), false); });
+    $('#fmove', v).addEventListener('change', e => { if (e.target.name === 'dir') movePrice(v, cur(), false); });
   }
 
   function payForm(project) {
@@ -2109,7 +2126,7 @@
           ${x.notes ? `<dt>Notes</dt><dd>${esc(x.notes)}</dd>` : ''}</dl>
         ${kind === 'unit' ? serialBox(x) : ''}
         ${kind === 'unit' && resOpen().some(r => r.item === x.item) ? `<h2 style="margin-bottom:4px">Reserved for projects</h2><div class="list" style="margin-bottom:12px">${resOpen().filter(r => r.item === x.item).map(r => `<button class="item" data-act="res" data-r="${r.r}"><span class="pill p-PARTIAL">${r.qty}</span><span class="grow"><div class="t small clip">${esc(r.party)}</div><div class="s clip">${esc([r.ref, fmtD(r.date, {year: 'numeric'})].filter(Boolean).join(' · '))}</div></span></button>`).join('')}</div>` : ''}
-        <h2 style="margin-bottom:4px">Recent moves</h2><div class="list">${moves.map(l => `<div class="item"><span class="pill ${l.dir === 'IN' ? 'p-Done' : 'p-UNPAID'}">${l.dir} ${l.qty}</span><span class="grow"><div class="s">${esc([fmtD(l.date, {year: 'numeric'}), l.party, l.ref, l.by].filter(Boolean).join(' · '))}</div></span></div>`).join('') || '<div class="empty">No moves recorded</div>'}</div>`,
+        <h2 style="margin-bottom:4px">Recent moves</h2><div class="list">${moves.map(l => `<div class="item"><span class="pill ${l.dir === 'IN' ? 'p-Done' : 'p-UNPAID'}">${l.dir} ${l.qty}</span><span class="grow"><div class="s">${esc([fmtD(l.date, {year: 'numeric'}), l.party, l.ref, l.cost != null ? 'cost ' + peso(l.cost, 0) : '', l.price != null ? (kind === 'part' ? 'price ' : 'SRP ') + peso(l.price, 0) : '', l.by].filter(Boolean).join(' · '))}</div></span></div>`).join('') || '<div class="empty">No moves recorded</div>'}</div>`,
         `<button class="btn" data-act="priceEdit" data-kind="${kind}" data-r="${x.r}">₱ Edit price</button>${kind === 'unit' ? `<button class="btn" data-act="resNew" data-item="${esc(x.item)}">${ic('plus')} Reserve</button>` : ''}<button class="btn green" data-act="move" data-kind="${kind}" data-item="${esc(x.item)}" data-dir="IN">${ic('inbox')} IN</button><button class="btn red" data-act="move" data-kind="${kind}" data-item="${esc(x.item)}" data-dir="OUT">${ic('outbox')} OUT</button>`);
     },
     priceEdit: el => {
@@ -2281,8 +2298,11 @@
       if (!(qty > 0)) return toast('Qty must be 1 or more', true);
       const now = (list.find(x => x.item === item) || {}).now || 0;
       if (f.dir === 'OUT' && qty > now && !confirmBox(`Stock is only ${now}. Record OUT ${qty} anyway?`)) return;
+      const pnum = t => String(t || '').replace(/[₱,\s]/g, '');
+      for (const k of ['cost', 'price']) { f[k] = pnum(f[k]); if (f[k] !== '' && (isNaN(+f[k]) || +f[k] < 0)) return toast('Price must be a number', true); }
+      f.setPrice = f.dir === 'IN' && !$('#m_upd').classList.contains('hidden') && !!f.setPrice;
       el.disabled = true;
-      try { await save('stockMove', {move: Object.assign(f, {kind: S.mv.kind, item})}, `${f.dir} ${qty} × ${item} ✓`); } catch (e) { el.disabled = false; }
+      try { await save('stockMove', {move: Object.assign(f, {kind: S.mv.kind, item})}, `${f.dir} ${qty} × ${item} ✓${f.setPrice ? ' · price updated' : ''}`); } catch (e) { el.disabled = false; }
     },
     pay: el => openSheet('Payment received', payForm(el.dataset.p), `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="savePay">Save payment</button>`),
     savePay: async el => {
