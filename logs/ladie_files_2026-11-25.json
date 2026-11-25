@@ -2,7 +2,8 @@
  "reminder_sent": "2026-11-25 09:35 (main window, Evan asked to do it now) — do NOT send again today",
  "already_done": [
   "HSN09ISB/HSU09ISB cost 20,000 -> 23,690 (Ladie 11/24 15:55 asked). New site button Stock > model > 'Edit price' (server v2.5 deployment 17, site v29). Ladie told to change SRP herself.",
-  "Ladie 11/24 15:52-15:53 photos = screenshots about HS09 price only (telegram_inbox/2026-11-24/ladie2/), not the requested files"
+  "Ladie 11/24 15:52-15:53 photos = screenshots about HS09 price only (telegram_inbox/2026-11-24/ladie2/), not the requested files",
+  "Ladie 11/25 14:49 asked to add price & SRP in Unit in/out -> DONE ~15:00: server v2.7 (deployment 20) + site v31, Ladie told. Do not redo."
  ],
  "waiting_for": [
   "newest AS Summary + Besco/Clarkhills/Philexcel/Sinyang",
@@ -16,6 +17,7 @@
  ],
  "ladie_said": "11/25 09:49 'ill just update others sir' (other files will come later)",
  "checks": [
-  "2026-11-25 10:00 run: no new TG msg after 09:49, no new Drive upload (checked via Drive API, app off). No reminder (already sent 09:35). No Evan alert (nothing happened)."
+  "2026-11-25 10:00 run: no new TG msg after 09:49, no new Drive upload (checked via Drive API, app off). No reminder (already sent 09:35). No Evan alert (nothing happened).",
+  "2026-11-25 14:00 run: no new TG msg after Evan 10:11 (last Ladie msg 09:49), no new Drive upload (Drive API, folder 1WGzYu3MVTK82Im8hEXl6_1scR-3mi3X-). No reminder (already sent 09:35). No Evan alert (nothing happened). Next: 17:00 run — if still nothing, send Evan alert."
  ]
 }
