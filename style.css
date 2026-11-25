@@ -261,6 +261,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); out
 .sheet-b { padding: 16px 20px; overflow: auto; flex: 1; }
 .sheet-f { padding: 12px 20px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); display: flex; gap: 10px; }
 .sheet-f .btn { flex: 1; }
+@media (max-width: 520px) { .sheet-f { flex-wrap: wrap; } .sheet-f .btn { min-width: calc(50% - 5px); } }
 .kv { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; font-size: 15px; margin-bottom: 14px; }
 .kv dt { color: var(--ink-3); font-weight: 600; font-size: 13.5px; padding-top: 1px; }
 .kv dd { margin: 0; word-break: break-word; }
@@ -454,6 +455,7 @@ table.htbl { border-collapse: collapse; font-size: 12.5px; min-width: 1250px; wi
 .htbl .h-pay { min-width: 110px; }
 .htbl tr.hhead td { background: #fff4d6; font-weight: 800; color: #6b4e00; }
 .htbl tr.hhead.hweb td { background: #e6f6ec; color: #17603a; }
+.htbl .sr-num { text-align: right; white-space: nowrap; }
 .htbl tr.hrow { cursor: pointer; } .htbl tr.hrow:hover td { background: #f6f9fe; }
 .hprint table.htbl { min-width: 0; font-size: 9.5px; } .hprint .htbl th { position: static; }
 #htWrap { max-height: 76vh; }
