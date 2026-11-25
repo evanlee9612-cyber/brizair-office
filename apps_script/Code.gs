@@ -12,7 +12,7 @@
  * AI answers: questions go to tab ASK. Sir Kim's PC (ask_relay.py + Codex/ChatGPT) picks them up with
  *   RELAY_KEY (Script Property, set once by Evan) and writes the answer back. Materials: tab KNOWLEDGE + Drive folder.
  */
-var VERSION = '2.4';
+var VERSION = '2.5';
 var SHEET_ID = '1jahKP1N3VVmiBqSXlr3xbmJxORVAWFVQNtxMLyqbCKE';
 var TZ = 'Asia/Manila';
 var SESSION_DAYS = 90;
@@ -54,7 +54,7 @@ function doPost(e) {
 /** which data sections each save changes (sent back right away) */
 var CHANGES = {addJob: ['schedule', 'log'], updateJob: ['schedule', 'log'], jobPay: ['schedule', 'log'], stockMove: ['stock', 'log'], payment: ['money', 'log'],
   newReceivable: ['money', 'log'], cleaningDone: ['customers', 'log'], addInstall: ['customers', 'log'], saveQuote: ['docs', 'log'],
-  quoteStatus: ['docs', 'log'], resAdd: ['stock', 'log'], resSet: ['stock', 'log'], recSave: ['stock', 'log'], orderRecv: ['stock', 'log'], addItem: ['stock', 'log'], jobPhoto: ['schedule', 'log'], kNote: ['ask', 'log'], kUpload: ['ask', 'log'], kHide: ['ask', 'log'], askRate: ['ask', 'log']};
+  quoteStatus: ['docs', 'log'], resAdd: ['stock', 'log'], resSet: ['stock', 'log'], recSave: ['stock', 'log'], orderRecv: ['stock', 'log'], addItem: ['stock', 'log'], itemPrice: ['stock', 'log'], jobPhoto: ['schedule', 'log'], kNote: ['ask', 'log'], kUpload: ['ask', 'log'], kHide: ['ask', 'log'], askRate: ['ask', 'log']};
 
 var ACTIONS = {
   boot: boot_,
@@ -67,6 +67,7 @@ var ACTIONS = {
   resSet: resSet_,
   recSave: recSave_,
   hist: hist_,
+  itemPrice: itemPrice_,
   histImport: histImport_,
   orderRecv: orderRecv_,
   addItem: addItem_,
@@ -695,6 +696,28 @@ function orderRecv_(req, me) {
   });
 }
 /** new model / part in the stock list (IN / OUT / NOW formulas copied from the row above) */
+/** change price of a stock model / part (SRP·cost or customer price·LG cost). Row + item name must match. Old → new goes to APP LOG */
+function itemPrice_(req, me) {
+  var part = req.kind === 'part';
+  return withLock_(function () {
+    var T = table_(part ? 'PARTS' : 'UNITS'), r = +req.r;
+    if (!(r >= 2 && r <= T.vals.length) || s_(T.vals[r - 1][col_(T, 'item')]) !== String(req.item || '')) throw bad_('Not found. Please refresh.');
+    var cols = part ? [['price', 'customer price w/ vat', 'Customer price'], ['cost', 'lg cost', 'LG cost']] : [['srp', 'srp', 'SRP'], ['cost', 'cost', 'Cost']];
+    var ch = [];
+    cols.forEach(function (c) {
+      if (req[c[0]] === undefined || req[c[0]] === '') return;
+      var v = n_(String(req[c[0]]).replace(/,/g, ''));
+      if (v === null || v < 0 || v > 10000000) throw bad_('Check the ' + c[2]);
+      var ci = col_(T, c[1]), old = n_(T.vals[r - 1][ci]);
+      if (old === v) return;
+      T.sh.getRange(r, ci + 1).setValue(v);
+      ch.push(c[2] + ' ' + (old === null ? '-' : old) + ' → ' + v);
+    });
+    if (!ch.length) return {ok: true, same: true};
+    done_(me, 'Price changed', String(req.item) + ' · ' + ch.join(', ') + (req.why ? ' · ' + clip_(req.why, 120) : ''), '💲');
+    return {ok: true};
+  });
+}
 function addItem_(req, me) {
   var x = req.item || {}, part = x.kind === 'part', name = String(x.item || '').trim();
   if (!name) throw bad_('Write the model / part name');
