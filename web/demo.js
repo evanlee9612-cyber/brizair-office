@@ -71,6 +71,10 @@
       cash: [{r: 2, id: 'DEMO-C-1', date: add(-3), hand: 50000, bri: 300000, good: 80000, by: 'Jheena', notes: 'Demo'}],
       oldPayments: [],
       suppliers: [{r: 2, id: 'DEMO-V-1', name: 'LG Electronics Philippines Inc.', supplies: 'LG units and parts', contact: 'Demo contact', phone: '', email: '', addr: 'Pasig City', notes: ''}],
+      serials: [{r: 2, id: 'DEMO-N-1', status: 'In stock', unit: 'APNQ36GR5A4/AUUQ36GH4', model: 'APNQ36GR5A4/AUUQ36GH4', isn: 'DEMO207KC1', osn: 'DEMO210HA1', po: '22', din: '2022-12-01', cost: 75399},
+        {r: 3, id: 'DEMO-N-2', status: 'In stock', unit: 'APNQ36GR5A4/AUUQ36GH4', model: 'APNQ36GR5A4/AUUQ36GH4', isn: 'DEMO207KC2', osn: 'DEMO210HA2', po: '22', din: '2022-12-01', cost: 75399},
+        {r: 4, id: 'DEMO-N-3', status: 'Installed', unit: 'HSN12ISB/HSU12ISB', model: 'HSN12ISB/HSU12ISB', isn: 'DEMO607HA3', osn: 'DEMO607HB3', po: 'CSAS 2026-07', cost: 26000, cust: 'Mr. Daniel Cruz', idate: add(-1), price: 37000, notes: 'Delivered, installed and start up'},
+        {r: 5, id: 'DEMO-N-4', status: 'Other', model: 'HSU18IBA', osn: 'DEMO405HA4', cust: 'Demo project on hold', notes: 'Outdoor only, not our stock'}],
       prices: [{r: 2, item: 'Coppertube 1/4', knp: 2297, hisys: 1953.13, notes: ''}, {r: 3, item: 'Rubber Insulation 1/4', knp: 301, hisys: 344.86, notes: ''}],
       units, parts, unitLog, partLog, schedule: sched, receivables, payments: [], customers, quotes: [], log: [], arTotal: null, ask: [], know: [], aiOnline: true};
     recalc(D);
@@ -195,6 +199,13 @@
       const skip = !!b.noStock && /unit|part/i.test(o.kind);
       if (hit && !skip && /unit|part/i.test(o.kind)) (/part/i.test(o.kind) ? D.partLog : D.unitLog).push({r: ++seq, date: b.date, item: o.item, dir: 'IN', qty: b.qty, party: o.supplier, ref: o.po, by: me.name, notes: 'Received (order)'});
       log(me, 'Order received', `${b.qty} × ${o.item}` + (skip ? ' (stock not changed)' : '')); recalc(D); persist(); return {ok: true, stock: hit && !skip ? o.item : '', noStock: skip};
+    } else if (a === 'serialSold') {
+      const x = (D.serials || []).find(k => k.r === b.r && k.id === b.id) || err('Not found. Please refresh.');
+      if (x.status !== 'In stock') err('This unit is ' + x.status + ' already');
+      if (!b.cust) err('Write the customer');
+      Object.assign(x, {status: 'Installed', cust: b.cust, idate: b.date, price: b.price === '' ? x.price : +b.price, notes: [x.notes, b.notes].filter(Boolean).join(' · ')});
+      if (b.out && x.unit) D.unitLog.push({r: ++seq, date: b.date, item: x.unit, dir: 'OUT', qty: 1, party: b.cust, ref: x.po || '', by: me.name, notes: 'Installed · SN ' + [x.isn, x.osn].filter(Boolean).join(' / ')});
+      log(me, 'Unit installed (serial)', x.model + ' · ' + b.cust);
     } else if (a === 'itemPrice') {
       const L = b.kind === 'part' ? D.parts : D.units, x = L.find(k => k.r === b.r && k.item === b.item) || err('Not found. Please refresh.');
       ['srp', 'price', 'cost'].forEach(k => { if (b[k] !== undefined && b[k] !== '') x[k] = +String(b[k]).replace(/,/g, ''); });

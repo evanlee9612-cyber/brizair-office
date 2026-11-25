@@ -12,7 +12,7 @@
  * AI answers: questions go to tab ASK. Sir Kim's PC (ask_relay.py + Codex/ChatGPT) picks them up with
  *   RELAY_KEY (Script Property, set once by Evan) and writes the answer back. Materials: tab KNOWLEDGE + Drive folder.
  */
-var VERSION = '2.5';
+var VERSION = '2.6';
 var SHEET_ID = '1jahKP1N3VVmiBqSXlr3xbmJxORVAWFVQNtxMLyqbCKE';
 var TZ = 'Asia/Manila';
 var SESSION_DAYS = 90;
@@ -54,7 +54,7 @@ function doPost(e) {
 /** which data sections each save changes (sent back right away) */
 var CHANGES = {addJob: ['schedule', 'log'], updateJob: ['schedule', 'log'], jobPay: ['schedule', 'log'], stockMove: ['stock', 'log'], payment: ['money', 'log'],
   newReceivable: ['money', 'log'], cleaningDone: ['customers', 'log'], addInstall: ['customers', 'log'], saveQuote: ['docs', 'log'],
-  quoteStatus: ['docs', 'log'], resAdd: ['stock', 'log'], resSet: ['stock', 'log'], recSave: ['stock', 'log'], orderRecv: ['stock', 'log'], addItem: ['stock', 'log'], itemPrice: ['stock', 'log'], jobPhoto: ['schedule', 'log'], kNote: ['ask', 'log'], kUpload: ['ask', 'log'], kHide: ['ask', 'log'], askRate: ['ask', 'log']};
+  quoteStatus: ['docs', 'log'], resAdd: ['stock', 'log'], resSet: ['stock', 'log'], recSave: ['stock', 'log'], orderRecv: ['stock', 'log'], addItem: ['stock', 'log'], itemPrice: ['stock', 'log'], serialSold: ['stock', 'log'], jobPhoto: ['schedule', 'log'], kNote: ['ask', 'log'], kUpload: ['ask', 'log'], kHide: ['ask', 'log'], askRate: ['ask', 'log']};
 
 var ACTIONS = {
   boot: boot_,
@@ -69,6 +69,7 @@ var ACTIONS = {
   hist: hist_,
   itemPrice: itemPrice_,
   histImport: histImport_,
+  serialSold: serialSold_,
   orderRecv: orderRecv_,
   addItem: addItem_,
   payment: payment_,
@@ -310,7 +311,7 @@ function boot_(req, me, parts) {
   var out = {ok: true, me: {name: me.name, role: me.role}, at: new Date().toISOString(), v: VERSION, sections: parts || SECTIONS,
     sheetUrl: 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit', jobs: JOBS, statuses: STATUSES, methods: METHODS};
   var T, i, names = [];
-  if (want.stock) names.push('UNITS', 'PARTS', 'UNIT IN-OUT', 'PART IN-OUT', RES_TAB, 'ORDERS', 'OTHER STOCK', 'PART ISSUES', 'SUPPLIERS', 'MATERIAL PRICES', 'REQUESTS');
+  if (want.stock) names.push('UNITS', 'PARTS', 'UNIT IN-OUT', 'PART IN-OUT', RES_TAB, 'ORDERS', 'OTHER STOCK', 'PART ISSUES', 'SUPPLIERS', 'MATERIAL PRICES', 'REQUESTS', 'UNIT SERIALS');
   if (want.schedule) names.push('SCHEDULE');
   if (want.money) names.push('RECEIVABLES', 'PAYMENTS', 'OLD PAYMENTS', 'PAYABLES', 'CASH');
   if (want.customers) names.push('CUSTOMERS');
@@ -567,6 +568,11 @@ var RECS = {
     ['svc', 'Service / complaint (요청·고장)'], ['find', 'Technical findings (점검 결과)'], ['model', 'Model (모델)'], ['work', 'Work done (한 작업)'],
     ['tech', 'Technicians (기사)'], ['qty', 'Qty (수량)'], ['amount', 'Amount (단가)'], ['total', 'Total (합계)'], ['pay', 'Payment (결제)'],
     ['note', 'Note (메모)'], ['head', 'Heading (제목줄)'], ['src', 'Source (출처)'], ['by', 'Added by (작성)']]},
+  // one machine (set) per line with its serial numbers (from Ladie's AIRCON UNIT INVENTORY W. SERIAL + Sales Report). unit = UNITS item name
+  serials: {tab: 'UNIT SERIALS', pre: 'N', need: ['model'], cols: [['id', 'ID'], ['status', 'Status (상태)'], ['unit', 'Stock item (재고 품목)'], ['model', 'Model (모델)'],
+    ['desc', 'Description (설명)'], ['isn', 'Indoor SN (실내기 시리얼)'], ['osn', 'Outdoor SN (실외기 시리얼)'], ['pmodel', 'Panel model (판넬 모델)'], ['psn', 'Panel SN (판넬 시리얼)'],
+    ['po', 'PO # (발주 번호)'], ['din', 'Date in (입고일)', 'dtxt'], ['cost', 'LG cost (원가)', 'num'], ['cust', 'Customer (손님)'], ['idate', 'Installed (설치일)', 'dtxt'],
+    ['price', 'Customer price (손님가)', 'num'], ['notes', 'Notes (메모)'], ['src', 'Source (출처)'], ['upd', 'Updated (수정일)', 'date']]},
   prices: {tab: 'MATERIAL PRICES', readOnly: true, cols: [['item', 'Item (자재)'], ['knp', 'KNP price (KNP 가격)', 'num'], ['hisys', 'Hisys price (Hisys 가격)', 'num'], ['notes', 'Notes (메모)']]}
 };
 function recRows_(k) {
@@ -578,7 +584,7 @@ function recRows_(k) {
     R.cols.forEach(function (c) {
       var ci = colOpt_(T, norm_(c[1])); if (ci < 0) return;
       var v = r[ci];
-      o[c[0]] = c[2] === 'num' ? n_(v) : c[2] === 'date' ? d_(v) : s_(v);
+      o[c[0]] = c[2] === 'num' ? n_(v) : c[2] === 'date' || (c[2] === 'dtxt' && typeof v === 'number') ? d_(v) || s_(v) : s_(v);  // dtxt: fast read gives day numbers
       if (o[c[0]] === '' && R.lazy) { delete o[c[0]]; return; }  // smaller reply for long lists
       if (c[0] !== 'id' && o[c[0]] !== '' && o[c[0]] !== null) any = true;
     });
@@ -634,10 +640,10 @@ function hist_(req, me) {
   list.forEach(function (g) { g.names = Object.keys(g.names).slice(0, 12); });
   return {ok: true, list: list};
 }
-/** owner only: bulk import of Excel lines. mode 'start' removes old lines whose Source starts with req.prefix (website lines stay); 'add' appends rows */
+/** owner only: bulk import of Excel lines (k = 'hist' service history or 'serials' unit serials). mode 'start' removes old lines whose Source starts with req.prefix (website lines stay); 'add' appends rows */
 function histImport_(req, me) {
   if (me.role !== 'owner') throw bad_('Owner only');
-  var R = RECS.hist;
+  var R = RECS[req.k === 'serials' ? 'serials' : 'hist'];
   return withLock_(function () {
     var ss = ss_(), sh = ss.getSheetByName(R.tab), heads = R.cols.map(function (c) { return c[1]; });
     if (!sh) { sh = ss.insertSheet(R.tab); sh.getRange(1, 1, 1, heads.length).setValues([heads]).setFontWeight('bold'); sh.setFrozenRows(1); }
@@ -653,13 +659,48 @@ function histImport_(req, me) {
     }
     var day = Utilities.formatDate(new Date(), TZ, 'yyyyMMdd'), base = +req.base || 0;
     var add = (req.rows || []).map(function (o, i) {
-      return R.cols.map(function (c) { return c[0] === 'id' ? 'BRZ-H-' + day + '-X' + (base + i + 1) : o[c[0]] === undefined ? '' : recVal_(c, o[c[0]]); });
+      return R.cols.map(function (c) { return c[0] === 'id' ? 'BRZ-' + R.pre + '-' + day + '-X' + (base + i + 1) : o[c[0]] === undefined ? '' : recVal_(c, o[c[0]]); });
     });
     if (!add.length) return {ok: true, added: 0};
     var start = sh.getLastRow() + 1;
     sh.getRange(start, 1, add.length, heads.length).setValues(add);
     if (req.last) log_(me.name, 'History import done', String(req.label || '') + ' · total ' + (start + add.length - 2) + ' lines');
     return {ok: true, added: add.length, to: start + add.length - 1};
+  });
+}
+/** one machine from the serial list installed / sold: status Installed + customer, date, price. out = also 1 OUT in UNIT IN-OUT for its stock item */
+function serialSold_(req, me) {
+  var R = RECS.serials, H = {};
+  R.cols.forEach(function (c) { H[c[0]] = norm_(c[1]); });
+  return withLock_(function () {
+    var T = table_(R.tab), r = +req.r;
+    if (!(r >= 2 && r <= T.vals.length)) throw bad_('Not found. Please refresh.');
+    var cur = T.vals[r - 1], g = function (k) { var ci = colOpt_(T, H[k]); return ci < 0 ? '' : s_(cur[ci]); };
+    if (g('id') !== String(req.id || '')) throw bad_('This was changed by someone else. Please refresh.');
+    if (g('status') !== 'In stock') throw bad_('This unit is ' + (g('status') || 'not in stock') + ' already');
+    var cust = clip_(req.cust, 160);
+    if (!cust) throw bad_('Write the customer');
+    var price = n_(String(req.price === undefined ? '' : req.price).replace(/,/g, ''));
+    if (req.price !== undefined && req.price !== '' && (price === null || price < 0)) throw bad_('Check the customer price');
+    var day = toDate_(req.date || today_()), unit = g('unit'), sn = [g('isn'), g('osn'), g('psn')].filter(String).join(' / ');
+    var o = {};
+    o[H.status] = 'Installed'; o[H.cust] = cust; o[H.idate] = day; o[H.upd] = toDate_(today_());
+    if (price !== null) o[H.price] = price;
+    if (req.notes) o[H.notes] = clip_([g('notes'), String(req.notes)].filter(String).join(' · '), 400);
+    var out = '';
+    if (req.out && unit) {
+      var L = table_('UNITS'), ic = col_(L, 'item');
+      for (var i = 1; i < L.vals.length && !out; i++) if (s_(L.vals[i][ic]) === unit) out = unit;
+      if (!out) throw bad_('Stock item not found: ' + unit + '. Untick "take 1 out of stock" or fix the stock item.');
+    }
+    writeRow_(T, r, o);
+    if (out) {
+      var M = table_('UNIT IN-OUT'), mr = lastRowOf_(M, col_(M, 'item')) + 1;
+      writeRow_(M, mr, {'date': day, 'item': out, 'in / out': 'OUT', 'qty': 1, 'customer / supplier': cust, 'po / invoice #': clip_(g('po'), 60),
+        'by': me.name, 'notes': clip_('Installed · SN ' + sn, 300)});
+    }
+    done_(me, 'Unit installed (serial)', g('model') + ' · SN ' + sn + ' · ' + cust + (out ? ' → stock OUT 1' : ''), '🚚');
+    return {ok: true, out: out};
   });
 }
 /** order line received (all or part): Received goes up; the unit / part goes IN to stock when it is in the stock list */

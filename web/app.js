@@ -241,7 +241,7 @@
     const arg = rest.join('/');
     S.route = name;
     document.body.dataset.route = name;
-    const tabFor = {cust: 'customers', hist: 'customers', materials: 'ask'}[name] || name;
+    const tabFor = {cust: 'customers', hist: 'customers', materials: 'ask', serials: 'stock'}[name] || name;
     $$('.me').forEach(b => b.classList.toggle('on', ['more', 'money', 'soa', 'quotes', 'quote', 'report', 'activity', 'help', 'orders', 'requests'].includes(name)));
     $$('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.go === tabFor));
     $$('.side button[data-go]').forEach(b => b.classList.toggle('on', b.dataset.go === ({cust: 'customers', quote: 'quotes'}[name] || name)));
@@ -484,7 +484,7 @@
         <button class="btn primary sm" data-act="move" data-kind="${kind}">${ic('plus')} In / Out</button></div>
       </div>
       <div class="btns" style="margin:-2px 0 12px"><button class="btn sm" data-act="itemNew" data-kind="${kind}">${ic('plus')} ${kind === 'part' ? 'New part' : 'New model'}</button>
-        <button class="btn sm" data-act="countSheet" data-kind="${kind}">${ic('print')} Count sheet</button><button class="btn sm" data-go="orders">${ic('inbox')} Orders (PO)</button></div>
+        <button class="btn sm" data-act="countSheet" data-kind="${kind}">${ic('print')} Count sheet</button><button class="btn sm" data-go="orders">${ic('inbox')} Orders (PO)</button>${kind === 'unit' ? `<button class="btn sm" data-go="serials">${ic('doc')} Serials & sales report</button>` : ''}</div>
       <div class="search">${ic('search')}<input id="qstock" placeholder="Search ${kind === 'part' ? 'part, part no., model' : 'model, type, hp'}…" value="${esc(S.q.stock || '')}" autocomplete="off"></div>
       <div class="chips" style="margin-bottom:12px">
         ${[['all', 'All ' + all.length], ['in', 'In stock'], ['zero', 'Zero stock']].map(c => `<button class="chip ${S.stockFilter === c[0] ? 'on' : ''}" data-act="stockFilter" data-f="${c[0]}">${c[1]}</button>`).join('')}
@@ -741,7 +741,8 @@
       if (words.every(w => text.includes(w))) hits.push(g);
     });
     hits.sort((a, b) => (lc(a.name).startsWith(words[0]) ? 0 : 1) - (lc(b.name).startsWith(words[0]) ? 0 : 1) || b.rows.length - a.rows.length);
-    return `<div class="card"><div class="card-h"><h2>${hits.length} customer${hits.length === 1 ? '' : 's'}</h2></div><div class="list">
+    const qs = q.replace(/\s+/g, ''), sers = qs.length >= 4 ? serAll().filter(s => [s.isn, s.osn, s.psn].some(v => v && lc(v).replace(/\s+/g, '').includes(qs))) : [];
+    return (sers.length ? `<div class="card"><div class="card-h"><h2>Serial list (${sers.length})</h2></div><div class="list">${sers.slice(0, 20).map(serRow).join('')}</div></div>` : '') + `<div class="card"><div class="card-h"><h2>${hits.length} customer${hits.length === 1 ? '' : 's'}</h2></div><div class="list">
       ${hits.slice(0, 80).map(g => `<button class="item" data-go="cust/${encodeURIComponent(g.name)}"><span class="avatar">${esc(initials(g.name))}</span>
         <span class="grow"><div class="t clip">${esc(g.name)}</div><div class="s clip">${esc([Array.from(g.co)[0], Array.from(g.locs)[0]].filter(Boolean).join(' · '))}</div></span>
         <span class="r muted small">${g.rows.length} unit${g.rows.length === 1 ? '' : 's'}</span></button>`).join('') || '<div class="empty">No customer found</div>'}</div></div>`;
@@ -942,6 +943,129 @@
       if (!HS.idx) { toast('Loading…', false, 20000); await histLoad(''); }
       const t = histTabFor(name);
       if (t) go('hist/' + encodeURIComponent(t)); else { S.q.hist = name.split(/\s+/)[0]; go('hist'); toast(tr('No exact match — check the list or add a new line')); }
+    }
+  };
+
+  // ───────── unit serial numbers (sheet tab UNIT SERIALS, from Ladie's AIRCON UNIT INVENTORY W. SERIAL + Sales Report) ─────────
+  const SER_ST = ['In stock', 'Installed', 'Other'];
+  const serAll = () => D().serials || [];
+  const serIn = item => serAll().filter(s => s.status === 'In stock' && s.unit === item);
+  const serSN = s => [s.isn && 'In ' + s.isn, s.osn && 'Out ' + s.osn, s.psn && 'Panel ' + s.psn].filter(Boolean).join(' · ');
+  const serPill = s => `<span class="pill ${s.status === 'In stock' ? 'p-Done' : s.status === 'Installed' ? 'p-Confirmed' : 'p-Moved'}">${esc(s.status || '?')}</span>`;
+  function serRow(s) {
+    return `<button class="item" data-act="serial" data-r="${s.r}"><span class="grow"><div class="t small clip">${esc(serSN(s) || '(no serial)')}</div>
+      <div class="s clip">${esc([s.model, s.cust, s.idate ? 'installed ' + fmtD(s.idate, {year: 'numeric'}) : s.din ? 'in ' + fmtD(s.din, {year: 'numeric'}) : '', s.po ? 'PO ' + s.po : ''].filter(Boolean).join(' · '))}</div></span>${serPill(s)}</button>`;
+  }
+  /** stock › model: serial numbers of the machines in stock (+ warning when the count is not the same as the stock qty) */
+  function serialBox(x) {
+    const list = serIn(x.item), n = list.length, has = serAll().length > 0;
+    if (!has) return '';
+    const warn = n !== (+x.now || 0) ? `<p class="small" style="margin:0 0 6px;color:var(--red)">Serial list has ${n}, stock count says ${x.now}. Please check (maybe an IN / OUT or a serial is missing).</p>` : '';
+    return `<div class="row between" style="margin-bottom:4px"><h2 style="margin:0">Serial numbers in stock (${n})</h2><button class="btn ghost sm" data-act="serialEdit" data-unit="${esc(x.item)}">${ic('plus')} Add</button></div>${warn}
+      <div class="list" style="margin-bottom:12px">${list.map(serRow).join('') || '<div class="empty">No serial numbers saved</div>'}</div>`;
+  }
+  const splitModel = m => { const p = String(m || '').split(/\/+/); return [p[0] || '', p.slice(1).join('/')]; };
+  const SR_COLS = ['Date delivered / installed', 'Company / customer name', 'Indoor model', 'Serial #', 'Outdoor model', 'Serial #', 'Front panel model', 'Serial #', 'LG Manila price', 'Customer price', 'Remarks', 'PO'];
+  function salesRows(ym) { return serAll().filter(s => s.status === 'Installed' && String(s.idate || '').slice(0, 7) === ym).sort((a, b) => (a.idate || '').localeCompare(b.idate || '') || a.r - b.r); }
+  function salesTable(ym, forPrint) {
+    const rows = salesRows(ym), sum = k => rows.reduce((a, s) => a + (+s[k] || 0), 0);
+    const body = rows.map((s, i) => {
+      const [im, om] = splitModel(s.model), p = rows[i - 1], same = p && p.idate === s.idate && p.cust === s.cust;
+      const td = [same ? '' : fmtD(s.idate, {year: 'numeric'}), same ? '' : s.cust, im, s.isn, om || (s.osn ? im : ''), s.osn, s.pmodel || (s.psn ? '' : 'N/A'), s.psn, s.cost ? peso(s.cost) : '', s.price ? peso(s.price) : '', s.notes, s.po];
+      return `<tr${forPrint ? '' : ` class="hrow" data-act="serial" data-r="${s.r}"`}>${td.map((v, k) => `<td class="${k >= 8 && k <= 9 ? 'sr-num' : k === 0 ? 'h-date' : ''}">${esc(v || '')}</td>`).join('')}</tr>`;
+    }).join('');
+    const tot = rows.length ? `<tr class="hhead"><td colspan="8">Total — ${rows.length} unit${rows.length === 1 ? '' : 's'}</td><td class="sr-num">${peso(sum('cost'))}</td><td class="sr-num">${peso(sum('price'))}</td><td colspan="2"></td></tr>` : '';
+    return `<table class="htbl"><thead><tr>${SR_COLS.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body || `<tr><td colspan="12"><div class="empty">No installed units saved for this month</div></td></tr>`}${tot}</tbody></table>`;
+  }
+  const ymName = ym => new Date(ym + '-15T00:00:00').toLocaleDateString('en-US', {month: 'long', year: 'numeric'}).toUpperCase();
+  VIEWS.serials = () => {
+    const tab = S.serTab || 'sales', ym = S.serYM || today().slice(0, 7);
+    const head = `<button class="btn ghost sm" data-go="stock" style="padding-left:0">${ic('left')} Stock</button>
+      <div class="row between wrap" style="margin-bottom:12px"><h1 style="margin:0">Serial numbers & sales report</h1>
+      <div class="seg"><button class="${tab === 'sales' ? 'on' : ''}" data-act="serTab" data-t="sales">Unit sales report</button><button class="${tab === 'all' ? 'on' : ''}" data-act="serTab" data-t="all">All serials</button></div></div>`;
+    if (tab === 'sales') return head + `<div class="row wrap" style="gap:8px;margin-bottom:10px"><input type="month" id="serYM" value="${esc(ym)}" style="max-width:180px">
+        <button class="btn" data-act="serPrint">${ic('print')} Print / PDF</button><button class="btn primary" data-act="serialEdit" data-st="Installed">${ic('plus')} Add sold unit</button></div>
+      <p class="small muted" style="margin:0 0 8px">Same as the Excel "Sales Report": units delivered and installed in ${esc(ymName(ym))}. Tap a line to see or fix it. In stock, tap a model → a serial → “Installed / sold” and it shows here.</p>
+      <div class="tbl-wrap">${salesTable(ym)}</div>`;
+    const c = {}; serAll().forEach(s => { c[s.status] = (c[s.status] || 0) + 1; });
+    return head + `<div class="search">${ic('search')}<input id="qser" placeholder="Search serial no., model, customer, PO…" value="${esc(S.q.ser || '')}" autocomplete="off"></div>
+      <div class="chips" style="margin-bottom:12px">${[['', 'All ' + serAll().length]].concat(SER_ST.map(x => [x, x + ' ' + (c[x] || 0)])).map(x => `<button class="chip ${(S.serSt || '') === x[0] ? 'on' : ''}" data-act="serSt" data-s="${x[0]}">${x[1]}</button>`).join('')}
+        <button class="chip" data-act="serialEdit">${ic('plus')} Add</button></div>
+      <div id="serList">${serListHtml()}</div>`;
+  };
+  function serListHtml() {
+    const q = lc(S.q.ser || '').replace(/\s+/g, ''), st = S.serSt || '';
+    const list = serAll().filter(s => (!st || s.status === st) && (!q || lc([s.isn, s.osn, s.psn, s.model, s.unit, s.cust, s.po, s.notes].join('|')).replace(/\s+/g, '').includes(q)));
+    return `<div class="card"><div class="list">${list.slice(0, 200).map(serRow).join('') || '<div class="empty">Nothing found</div>'}</div></div>`;
+  }
+  VIEWS.serials.after = () => {
+    const m = $('#serYM'); m && m.addEventListener('change', () => { S.serYM = m.value || today().slice(0, 7); render(); });
+    const q = $('#qser'); q && q.addEventListener('input', () => { S.q.ser = q.value; $('#serList').innerHTML = serListHtml(); });
+  };
+  function serialForm(s, unit, st) {
+    s = s || {};
+    const v = k => esc(s[k] === undefined || s[k] === null ? '' : s[k]), units = stockList('unit');
+    const status = s.status || st || 'In stock', u = s.unit !== undefined ? s.unit : unit || '';
+    const iso = k => !s[k] || /^\d{4}-\d{2}-\d{2}$/.test(s[k]);
+    return `<form id="fser">
+      <div class="f2">${field('Status', `<select name="status">${SER_ST.map(x => `<option${x === status ? ' selected' : ''}>${x}</option>`).join('')}</select>`)}
+        ${field('Stock item', `<select name="unit"><option value="">— not in the stock list —</option>${units.map(x => `<option${x.item === u ? ' selected' : ''} value="${esc(x.item)}">${esc(x.item)}</option>`).join('')}</select>`)}</div>
+      ${field('Model', `<input name="model" value="${esc(s.model || (u ? u.replace(/\s.*$/, '') : ''))}" autocapitalize="characters" placeholder="e.g. HSN12ISB/HSU12ISB">`)}
+      <div class="f2">${field('Indoor SN', `<input name="isn" value="${v('isn')}" autocapitalize="characters">`)}${field('Outdoor SN', `<input name="osn" value="${v('osn')}" autocapitalize="characters">`)}</div>
+      <div class="f2">${field('Front panel model', `<input name="pmodel" value="${v('pmodel')}" autocapitalize="characters">`)}${field('Front panel SN', `<input name="psn" value="${v('psn')}" autocapitalize="characters">`)}</div>
+      <div class="f3">${field('PO #', `<input name="po" value="${v('po')}">`)}${field('Date in', `<input ${iso('din') ? 'type="date"' : ''} name="din" value="${v('din')}">`)}${field('LG cost', `<input name="cost" inputmode="decimal" value="${v('cost')}">`)}</div>
+      <div class="f3">${field('Customer', `<input name="cust" value="${v('cust')}">`)}${field('Installed', `<input ${iso('idate') ? 'type="date"' : ''} name="idate" value="${v('idate')}">`)}${field('Customer price', `<input name="price" inputmode="decimal" value="${v('price')}">`)}</div>
+      ${field('Remarks', `<input name="notes" value="${v('notes')}">`)}
+      ${s.src ? `<p class="small muted">From: ${esc(s.src)}${s.upd ? ' · updated ' + esc(s.upd) : ''}</p>` : ''}
+      <p class="small muted">Saving here does not change the stock qty. To take it out of stock use “Installed / sold”.</p></form>`;
+  }
+  const SER_ACTS = {
+    serTab: el => { S.serTab = el.dataset.t; render(); },
+    serSt: el => { S.serSt = el.dataset.s; render(); },
+    serPrint: () => { const ym = S.serYM || today().slice(0, 7); printHtml(`<div class="doc hprint"><h2 style="margin:0 0 4px">BRIZAIR CORP — Aircondition units delivered and installed</h2><div style="margin-bottom:8px">As of <b>${esc(ymName(ym))}</b> · printed ${esc(fmtD(today(), {year: 'numeric'}))}</div>${salesTable(ym, true)}</div>`, true); },
+    serial: el => {
+      const s = findRec('serials', el.dataset.r); if (!s) return;
+      const kv = [['Status', s.status], ['Stock item', s.unit], ['Model', s.model], ['Description', s.desc], ['Indoor SN', s.isn], ['Outdoor SN', s.osn], ['Front panel', [s.pmodel, s.psn].filter(Boolean).join(' · ')],
+        ['PO #', s.po], ['Date in', s.din && fmtD(s.din, {year: 'numeric'})], ['LG cost', s.cost ? peso(s.cost) : ''], ['Customer', s.cust], ['Installed', s.idate && fmtD(s.idate, {year: 'numeric'})],
+        ['Customer price', s.price ? peso(s.price) : ''], ['Remarks', s.notes]].filter(x => x[1]);
+      openSheet(s.model || 'Unit', `<dl class="kv">${kv.map(x => `<dt>${x[0]}</dt><dd>${esc(x[1])}</dd>`).join('')}</dl>`,
+        `<button class="btn" data-act="serialEdit" data-r="${s.r}">Edit</button>${s.status === 'In stock' ? `<button class="btn primary" data-act="serialSold" data-r="${s.r}">${ic('outbox')} Installed / sold</button>` : ''}`);
+    },
+    serialEdit: el => {
+      const s = el.dataset.r ? findRec('serials', el.dataset.r) : null;
+      S.serX = s;
+      openSheet(s ? 'Edit serial' : 'Add serial', serialForm(s, el.dataset.unit, el.dataset.st), `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="serialSave">Save</button>`);
+    },
+    serialSave: async el => {
+      const f = formData('#fser'), s = S.serX;
+      if (!f.model && !f.unit) return toast(tr('Write the model'), true);
+      if (!f.model) f.model = f.unit.replace(/\s.*$/, '');
+      if (!f.isn && !f.osn && !f.psn) return toast(tr('Write at least one serial number'), true);
+      const dup = serAll().find(x => x !== s && [x.isn, x.osn, x.psn].some(v => v && [f.isn, f.osn, f.psn].includes(v)));
+      if (dup && !confirm(tr('This serial is already in the list') + ' (' + (dup.model || '') + ' · ' + (dup.status || '') + '). ' + tr('Save anyway?'))) return;
+      ['cost', 'price'].forEach(k => { f[k] = String(f[k] || '').replace(/,/g, ''); });
+      if (!s) f.src = 'Website · ' + (S.me ? S.me.name : '');
+      el.disabled = true;
+      try { await save('recSave', {k: 'serials', r: s ? s.r : undefined, id: s ? s.id : undefined, set: f}, 'Saved ✓'); } catch (e) { el.disabled = false; }
+    },
+    serialSold: el => {
+      const s = findRec('serials', el.dataset.r); if (!s) return;
+      S.serX = s;
+      const u = s.unit ? stockList('unit').find(x => x.item === s.unit) : null;
+      const names = Array.from(custGroups().keys()).slice(0, 2000);
+      openSheet('Installed / sold — ' + (s.model || ''), `<p class="small" style="margin-top:0">${esc(serSN(s))}</p><form id="fsold">
+        ${field('Customer / company', `<input name="cust" list="soldCl" required placeholder="e.g. Mr. Denny / Sweetville 301"><datalist id="soldCl">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>`)}
+        <div class="f2">${field('Date installed', `<input type="date" name="date" value="${today()}">`)}${field('Customer price', `<input name="price" inputmode="decimal" placeholder="${u && u.srp ? 'SRP ' + u.srp : ''}">`)}</div>
+        ${field('Remarks', '<input name="notes" placeholder="e.g. Delivered, installed and start up">')}
+        ${u ? `<label class="row" style="gap:8px;margin-top:6px"><input type="checkbox" name="out" checked style="width:20px;height:20px"> <span>Also take 1 out of stock (OUT) — ${esc(u.item)}, now ${u.now}</span></label>
+          <p class="small muted">Untick if you already pressed OUT for this unit.</p>` : '<p class="small muted">Not linked to a stock item, so the stock qty does not change.</p>'}</form>`,
+        `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="serialSoldSave">Save</button>`);
+    },
+    serialSoldSave: async el => {
+      const f = formData('#fsold'), s = S.serX; if (!s) return;
+      if (!f.cust) return toast(tr('Write the customer'), true);
+      el.disabled = true;
+      try { await save('serialSold', {r: s.r, id: s.id, cust: f.cust, date: f.date || today(), price: String(f.price || '').replace(/,/g, ''), notes: f.notes, out: !!f.out}, f.out ? 'Saved ✓ 1 OUT from stock' : 'Saved ✓'); } catch (e) { el.disabled = false; }
     }
   };
 
@@ -1320,7 +1444,7 @@
 
   VIEWS.more = () => `<h1>More</h1><p class="sub">Logged in as <b>${esc(S.me && S.me.name)}</b></p>
     <div class="card"><div class="list">
-      ${[['hist', 'Service history (AS Summary)', 'log', 'c-green'], ['ask', 'Ask GPT', 'chat', 'c-blue'], ['materials', 'Materials for AI (upload)', 'book', 'c-violet'], ['orders', 'Orders (PO) & suppliers', 'inbox', 'c-teal'], ['money', 'Money — unpaid & payments', 'peso', 'c-amber'], ['soa', 'Service SOA — service & cleaning collection', 'doc', 'c-teal'], ['quotes', 'Quotes, invoices & forms', 'doc', 'c-red'], ['report', 'LG Monthly Report', 'chart', 'c-green'], ['activity', 'Activity', 'log', 'c-blue'], ['requests', '💡 Ask for a change / report a problem', 'help', 'c-amber'], ['help', 'Help', 'help', 'c-violet']]
+      ${[['hist', 'Service history (AS Summary)', 'log', 'c-green'], ['ask', 'Ask GPT', 'chat', 'c-blue'], ['materials', 'Materials for AI (upload)', 'book', 'c-violet'], ['orders', 'Orders (PO) & suppliers', 'inbox', 'c-teal'], ['serials', 'Serial numbers & unit sales report', 'doc', 'c-green'], ['money', 'Money — unpaid & payments', 'peso', 'c-amber'], ['soa', 'Service SOA — service & cleaning collection', 'doc', 'c-teal'], ['quotes', 'Quotes, invoices & forms', 'doc', 'c-red'], ['report', 'LG Monthly Report', 'chart', 'c-green'], ['activity', 'Activity', 'log', 'c-blue'], ['requests', '💡 Ask for a change / report a problem', 'help', 'c-amber'], ['help', 'Help', 'help', 'c-violet']]
         .map(x => `<button class="item" data-go="${x[0]}"><span class="qi ${x[3]}" style="width:38px;height:38px">${ic(x[2])}</span><span class="grow t">${x[1]}</span>${ic('right')}</button>`).join('')}
       <button class="item" data-act="lang"><span class="qi c-blue" style="width:38px;height:38px"><b class="noi18n">A/가</b></span><span class="grow t">Language</span><span class="muted small noi18n">${lang() === 'ko' ? '한국어 → English' : 'English → 한국어'}</span></button>
       <button class="item" data-act="openSheet"><span class="qi c-teal" style="width:38px;height:38px">${ic('sheet')}</span><span class="grow t">Open Google Sheet</span>${ic('right')}</button>
@@ -1983,6 +2107,7 @@
         <dl class="kv">${kind === 'unit' ? `<dt>Type</dt><dd>${esc(x.type)} ${esc(x.hp)}</dd><dt>SRP</dt><dd>${peso(x.srp)}</dd><dt>Cost</dt><dd>${peso(x.cost)}</dd>${x.supplier ? `<dt>Supplier</dt><dd>${esc(x.supplier)}</dd>` : ''}`
           : `<dt>Part no.</dt><dd>${esc(x.pn || '—')}</dd><dt>Group</dt><dd>${esc(x.group)}</dd><dt>Customer price</dt><dd>${peso(x.price)}</dd><dt>LG cost</dt><dd>${peso(x.cost)}</dd>`}
           ${x.notes ? `<dt>Notes</dt><dd>${esc(x.notes)}</dd>` : ''}</dl>
+        ${kind === 'unit' ? serialBox(x) : ''}
         ${kind === 'unit' && resOpen().some(r => r.item === x.item) ? `<h2 style="margin-bottom:4px">Reserved for projects</h2><div class="list" style="margin-bottom:12px">${resOpen().filter(r => r.item === x.item).map(r => `<button class="item" data-act="res" data-r="${r.r}"><span class="pill p-PARTIAL">${r.qty}</span><span class="grow"><div class="t small clip">${esc(r.party)}</div><div class="s clip">${esc([r.ref, fmtD(r.date, {year: 'numeric'})].filter(Boolean).join(' · '))}</div></span></button>`).join('')}</div>` : ''}
         <h2 style="margin-bottom:4px">Recent moves</h2><div class="list">${moves.map(l => `<div class="item"><span class="pill ${l.dir === 'IN' ? 'p-Done' : 'p-UNPAID'}">${l.dir} ${l.qty}</span><span class="grow"><div class="s">${esc([fmtD(l.date, {year: 'numeric'}), l.party, l.ref, l.by].filter(Boolean).join(' · '))}</div></span></div>`).join('') || '<div class="empty">No moves recorded</div>'}</div>`,
         `<button class="btn" data-act="priceEdit" data-kind="${kind}" data-r="${x.r}">₱ Edit price</button>${kind === 'unit' ? `<button class="btn" data-act="resNew" data-item="${esc(x.item)}">${ic('plus')} Reserve</button>` : ''}<button class="btn green" data-act="move" data-kind="${kind}" data-item="${esc(x.item)}" data-dir="IN">${ic('inbox')} IN</button><button class="btn red" data-act="move" data-kind="${kind}" data-item="${esc(x.item)}" data-dir="OUT">${ic('outbox')} OUT</button>`);
@@ -2433,11 +2558,11 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.t && Date.now() - (S._lastRefresh || 0) > 120000) { S._lastRefresh = Date.now(); refresh(true); } });
 
   /** one-time "What's new" popup — change NOTICE.id to show a new one; each phone shows it until "Got it" */
-  const NOTICE = {id: '2026-11-24b', who: ['Ladie', 'Sir Kim', 'Jheena'], title: 'What’s new (Nov 24)', items: [
-    ['💵 Payment saved only once', 'Ladie and Jheena both saved Gemik Clark’s ₱5,500 today, so it shows as ₱11,000 paid. From now on, “Save payment” checks the latest balance first. If someone already saved it, you will see “Already paid”.'],
-    ['📋 Service history = your AS Summary Report', 'Customers → “Service history”. Tap a customer name → all past services in one table (date, complaint, findings, model, work done, technicians, amount, payment). Your AS SUMMARY REPORT is already inside.'],
-    ['➕ Add or fix a line', '“Add line” for a new service, or tap any line to edit it. Jobs you mark Done in the Schedule also show here (green), so you don’t need to type them twice.'],
-    ['🖨️ Print', '“Print / PDF” prints the table for the customer.']]};
+  const NOTICE = {id: '2026-11-25', who: ['Ladie', 'Sir Kim'], go: 'serials', goLabel: 'Open sales report', title: 'What’s new (Nov 25)', items: [
+    ['🔢 Serial numbers are inside', 'Your file “AIRCON UNIT INVENTORY W. SERIAL” is in the website now. Stock → tap a model → you see the serial numbers in stock.'],
+    ['🚚 Installed / sold', 'Tap a serial → “Installed / sold” → customer, date, price. It also takes 1 out of stock (untick if you already pressed OUT).'],
+    ['📋 Unit sales report', 'Stock → “Serials & sales report”. Same columns as your Excel Sales Report, by month. “Print / PDF” for the report.'],
+    ['🔎 Search by serial', 'Type a serial no. in Customers search or in “All serials” to find the unit.']]};
   const noticeForMe = () => !NOTICE.who || (S.me && NOTICE.who.some(w => lc(S.me.name).startsWith(lc(w))));
   /** shows after login / start; if another window (help, a form) is open or she is typing, it waits and tries again */
   function showNotice(tries) {
@@ -2446,11 +2571,11 @@
     const ae = document.activeElement, typing = ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName) && !$('.pad');
     if ($('.veil') || typing || !S.D) { if ((tries || 0) < 200) S._noticeT = setTimeout(() => showNotice((tries || 0) + 1), 3000); return; }
     openSheet(NOTICE.title, `<div class="list">${NOTICE.items.map(x => `<div class="item"><span class="grow"><div class="t">${x[0]}</div><div class="s" style="white-space:normal">${x[1]}</div></span></div>`).join('')}</div>`,
-      `<div class="btns" style="width:100%"><button class="btn" data-act="noticeOrders">${ic('log')} Open Service history</button><button class="btn primary" data-act="noticeOk">Got it</button></div>`);
+      `<div class="btns" style="width:100%"><button class="btn" data-act="noticeOrders">${ic('log')} ${esc(NOTICE.goLabel || 'Open')}</button><button class="btn primary" data-act="noticeOk">Got it</button></div>`);
   }
   ACT.noticeOk = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); setTimeout(showSurvey, 600); };
-  ACT.noticeOrders = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); go('hist'); };
-  Object.assign(ACT, REQ_ACTS, HIST_ACTS);
+  ACT.noticeOrders = () => { LS.set('brz_notice', NOTICE.id); closeSheet(); go(NOTICE.go || 'hist'); };
+  Object.assign(ACT, REQ_ACTS, HIST_ACTS, SER_ACTS);
 
   function start() {
     shell();
