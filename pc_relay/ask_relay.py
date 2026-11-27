@@ -431,7 +431,7 @@ def main():
                     post({'a': 'relayAnswer', 'key': key, 'id': q['id'], 'error': True, 'answer': str(e)[:300]})
             if once:
                 return
-            time.sleep(1 if qs else 5)
+            time.sleep(1 if qs else 20)  # idle: 20s (was 5s, ~9 server calls/min nonstop)
         except Exception as e:  # noqa — network hiccups: wait and retry
             fails += 1
             log(f'error: {e}')

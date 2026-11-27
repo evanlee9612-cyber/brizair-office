@@ -560,6 +560,10 @@ var RECS = {
     ['amount', 'Amount (금액)', 'num'], ['status', 'Status (상태)'], ['paid', 'Paid date (지급일)', 'date'], ['notes', 'Notes (메모)'], ['upd', 'Updated (수정일)', 'date']]},
   cash: {tab: 'CASH', pre: 'C', money: true, need: ['date'], cols: [['id', 'ID'], ['date', 'Date (날짜)', 'date'], ['hand', 'Cash on hand (현금)', 'num'],
     ['bri', 'Bank BRIZAIR CORP (은행)', 'num'], ['good', 'Bank GOODLIVING CORP (은행)', 'num'], ['by', 'By (작성)'], ['notes', 'Notes (메모)']]},
+  // daily cash book (DAILY CASH BOOK tab): one row per cash/check/bank line from the daily cash report
+  dailybook: {tab: 'DAILY CASH BOOK', pre: 'D', money: true, need: ['date', 'item'], cols: [['id', 'ID'], ['date', 'Date (날짜)', 'date'], ['type', 'Type (구분)'],
+    ['item', 'Item (항목)'], ['ref', 'Ref / PO# (번호)'], ['party', 'Party (상대)'], ['cin', 'Cash in (현금 수입)', 'num'], ['cout', 'Cash out (현금 지출)', 'num'],
+    ['chk', 'Check / bank in (수표·은행 입금)', 'num'], ['method', 'Method (방식)'], ['status', 'Status (상태)'], ['notes', 'Notes (메모)']]},
   requests: {tab: 'REQUESTS', pre: 'Q', need: ['text'], cols: [['id', 'ID'], ['date', 'Date (날짜)', 'date'], ['who', 'Who (누가)'], ['type', 'Type (종류)'],
     ['text', 'Request (요청)'], ['status', 'Status (상태)'], ['reply', 'Reply (답)'], ['upd', 'Updated (수정일)', 'date']]},
   // service history per customer (from Ladie's AS SUMMARY REPORT + new lines). lazy = not in boot, read with action 'hist'

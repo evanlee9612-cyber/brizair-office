@@ -1079,6 +1079,10 @@
   const isSalary = x => /salary/i.test(x.name || '');
   const payOpen = () => (D().payables || []).filter(x => (x.status || 'Open') !== 'Paid');
   const cashLast = () => (D().cash || []).filter(c => c.date).slice().sort((a, b) => a.date.localeCompare(b.date)).pop() || null;
+  // daily cash book: sort key yyyymmdd from "2026-11-27" or "11/27/2026"
+  const dkey = s => { s = String(s || ''); let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return m[1] + m[2] + m[3]; m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? m[3] + m[1].padStart(2, '0') + m[2].padStart(2, '0') : ''; };
+  const dbRows = () => (D().dailybook || []).filter(x => x.item && !/^(Calculated|Difference)/.test(String(x.item))).slice().sort((a, b) => dkey(b.date).localeCompare(dkey(a.date)));
+  const dbRow = x => `<div class="item"><span class="grow"><div class="t small">${esc(x.item)}</div><div class="s">${esc([x.date, x.type, x.party, x.ref, x.method, x.status].filter(Boolean).join(' · '))}</div></span><span class="r num">${esc([x.cin ? '+' + money(x.cin) : '', x.cout ? '-' + money(x.cout) : '', x.chk ? 'chk ' + money(x.chk) : ''].filter(Boolean).join(' '))}</span></div>`;
   const cashSum = c => c ? (+c.hand || 0) + (+c.bri || 0) + (+c.good || 0) : 0;
   function payRow(x) {
     return `<div class="item"><span class="grow"><div class="t clip">${esc(x.name)}</div><div class="s clip">${esc([x.due ? 'Due ' + x.due : '', x.status === 'Paid' && x.paid ? 'Paid ' + fmtD(x.paid, {year: 'numeric'}) : '', x.notes].filter(Boolean).join(' · '))}</div></span>
@@ -1165,7 +1169,10 @@
         ${(D().payables || []).some(x => x.status === 'Paid') ? `<details style="margin-top:10px"><summary class="muted small">Paid (${(D().payables || []).filter(x => x.status === 'Paid').length})</summary><div class="list">${(D().payables || []).filter(x => x.status === 'Paid').map(payRow).join('')}</div></details>` : ''}</div>` : ''}
       ${tab === 'cash' ? `<div class="card"><div class="card-h"><h2>Cash & bank</h2><button class="btn primary sm" data-act="cashAdd">${ic('plus')} Update balances</button></div>
         ${cl ? `<dl class="kv"><dt>As of</dt><dd>${esc(fmtLong(cl.date))}</dd><dt>Cash on hand</dt><dd>${peso(cl.hand)}</dd><dt>Bank BRIZAIR CORP</dt><dd>${peso(cl.bri)}</dd><dt>Bank GOODLIVING CORP</dt><dd>${peso(cl.good)}</dd><dt>Total</dt><dd class="big">${peso(cashSum(cl))}</dd></dl>` : '<div class="empty">No balances yet</div>'}
-        <div class="list" style="margin-top:8px">${(D().cash || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(1, 8).map(c => `<div class="item"><span class="grow"><div class="t small">${esc(fmtD(c.date, {year: 'numeric'}))}</div><div class="s">${esc(['Cash ' + money(c.hand), 'BRIZAIR ' + money(c.bri), 'GOODLIVING ' + money(c.good), c.by].filter(Boolean).join(' · '))}</div></span><span class="r num">${peso(cashSum(c))}</span></div>`).join('')}</div></div>` : ''}
+        <div class="list" style="margin-top:8px">${(D().cash || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(1, 8).map(c => `<div class="item"><span class="grow"><div class="t small">${esc(fmtD(c.date, {year: 'numeric'}))}</div><div class="s">${esc(['Cash ' + money(c.hand), 'BRIZAIR ' + money(c.bri), 'GOODLIVING ' + money(c.good), c.by].filter(Boolean).join(' · '))}</div></span><span class="r num">${peso(cashSum(c))}</span></div>`).join('')}</div>
+        <div class="card" style="margin-top:12px"><div class="card-h"><h2>Daily cash book</h2><button class="btn sm" data-act="dbAdd">${ic('plus')} Add line</button></div>
+        <div class="list">${dbRows().slice(0, 60).map(dbRow).join('') || '<div class="empty">No lines yet</div>'}</div>
+        <p class="muted small">Check / bank lines are not in cash on hand. Newest first.</p></div></div>` : ''}
       <p class="muted small mt">Unpaid = balance on Nov 12 minus payments recorded here. “AR report” prints the same report as the Excel “Account Receivable” (receivables, cash & bank, inventory, payables).</p>`;
   };
   function arReportDoc(asOf) {
@@ -2394,6 +2401,26 @@
       if (!f.date) return toast('Date is needed', true);
       el.disabled = true;
       try { await save('recSave', {k: 'cash', set: {date: f.date, hand: n(f.hand), bri: n(f.bri), good: n(f.good), notes: f.notes, by: S.me ? S.me.name : ''}}, 'Balances saved ✓'); } catch (e) { el.disabled = false; }
+    },
+    dbAdd: () => { openSheet('Add cash book line', `<form id="fdb">
+      ${field('Date', `<input type="date" name="date" value="${today()}">`)}
+      ${field('Type', `<select name="type"><option>In</option><option>Out</option><option>Check</option><option>Note</option></select>`)}
+      ${field('Item', `<input name="item">`)}
+      ${field('Ref / PO#', `<input name="ref">`)}
+      ${field('Party', `<input name="party">`)}
+      ${field('Cash in', `<input name="cin" inputmode="decimal">`)}
+      ${field('Cash out', `<input name="cout" inputmode="decimal">`)}
+      ${field('Check / bank in', `<input name="chk" inputmode="decimal">`)}
+      ${field('Method', `<select name="method"><option>Cash</option><option>Check</option><option>Bank</option></select>`)}
+      ${field('Status', `<input name="status">`)}
+      ${field('Notes', `<input name="notes">`)}</form>`,
+      `<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="dbSave">Save</button>`); },
+    dbSave: async el => {
+      const f = formData('#fdb'), n = v => String(v || '').replace(/,/g, '');
+      if (!f.date) return toast('Date is needed', true);
+      if (!String(f.item || '').trim()) return toast('Item is needed', true);
+      el.disabled = true;
+      try { await save('recSave', {k: 'dailybook', set: {date: f.date, type: f.type, item: f.item, ref: f.ref, party: f.party, cin: n(f.cin), cout: n(f.cout), chk: n(f.chk), method: f.method, status: f.status, notes: f.notes}}, 'Line saved ✓'); } catch (e) { el.disabled = false; }
     },
     soa: el => {
       const r = (D().receivables || []).find(x => x.r === +el.dataset.r); if (!r) return;
