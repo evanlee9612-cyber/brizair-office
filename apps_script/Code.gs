@@ -382,6 +382,8 @@ function boot_(req, me, parts) {
       });
     }
     Object.keys(RECS).forEach(function (k) { if (RECS[k].money && !RECS[k].lazy) out[k] = recRows_(k); });
+    // payroll lines in the daily cash book are owner-only (staff get the book without them)
+    if (me.role !== 'owner' && out.dailybook) out.dailybook = out.dailybook.filter(function (r) { return !/payroll|salary|allowance/i.test(String(r.item || '')); });
     tm.money = Date.now() - t0;
   }
   if (want.customers) {
