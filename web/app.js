@@ -1781,8 +1781,12 @@
     S.doneJob = j;
     const isClean = /clean/i.test(j.job || '');
     const guess = isClean ? guessCustomer(j.customer) : '';
+    // already moved to another day → the new job is the one to mark Done (else the customer is charged twice)
+    const mvTo = ((j.notes || '').match(/Moved to \d{4}-\d{2}-\d{2}/g) || []).pop();
+    const moved = j.status === 'Moved' || !!mvTo;
     openSheet('Job done', `<form id="fdone">
       <p class="small" style="margin:0 0 10px">${esc(j.customer)} · ${esc(j.date ? fmtLong(j.date) : fmtLong(today()))}${j.job ? ' · ' + esc(j.job) : ''}</p>
+      ${moved ? `<div style="background:#fff4e5;border:1px solid #f0b46a;border-radius:10px;padding:10px;margin:0 0 10px"><b>⚠️ This job was already moved to another day.</b>${mvTo ? `<div class="small" style="margin:4px 0">${esc(mvTo)}</div>` : ''}<div class="small">Open the job on the new date and mark that one Done — or the customer is charged twice.</div></div>` : ''}
       ${/complain|request/i.test(j.notes || '') ? '' : field('Complain / request', `<input name="comp" list="dlcomp" placeholder="e.g. Water leaking, Not cooling, Cleaning">`) + dl('dlcomp', ['Cleaning', 'Water Leaking', 'Not Cooling', 'Not Working', 'Noisy', 'Error code'])}
       ${field('Work done', `<textarea name="work" placeholder="e.g. General cleaning 3 units ceiling suspended · Flush out drain"></textarea>`, 'Saved in Notes as “Complain: … / Work Done: …”. You can leave it empty.')}
       ${isSvc(j) && !(j.charge > 0) ? field('Charge to customer (₱)', `<input name="charge" inputmode="decimal" placeholder="e.g. 1500 (empty = later)">`, 'Goes to Service SOA (unpaid list). Leave empty if you don’t know yet.') : ''}
@@ -2638,11 +2642,8 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.t && Date.now() - (S._lastRefresh || 0) > 120000) { S._lastRefresh = Date.now(); refresh(true); } });
 
   /** one-time "What's new" popup — change NOTICE.id to show a new one; each phone shows it until "Got it" */
-  const NOTICE = {id: '2026-11-25', who: ['Ladie', 'Sir Kim'], go: 'serials', goLabel: 'Open sales report', title: 'What’s new (Nov 25)', items: [
-    ['🔢 Serial numbers are inside', 'Your file “AIRCON UNIT INVENTORY W. SERIAL” is in the website now. Stock → tap a model → you see the serial numbers in stock.'],
-    ['🚚 Installed / sold', 'Tap a serial → “Installed / sold” → customer, date, price. It also takes 1 out of stock (untick if you already pressed OUT).'],
-    ['📋 Unit sales report', 'Stock → “Serials & sales report”. Same columns as your Excel Sales Report, by month. “Print / PDF” for the report.'],
-    ['🔎 Search by serial', 'Type a serial no. in Customers search or in “All serials” to find the unit.']]};
+  const NOTICE = {id: '2026-11-28', who: ['Ladie'], go: 'schedule', goLabel: 'Open schedule', title: 'What’s new (Nov 28)', items: [
+    ['⚠️ Moved jobs: mark Done on the new day', 'When a job is moved, the old one stays “Moved” and the new date has its own job. Mark Done and write the charge only on the new job. If you tap Done on the old job, a warning shows now.']]};
   const noticeForMe = () => !NOTICE.who || (S.me && NOTICE.who.some(w => lc(S.me.name).startsWith(lc(w))));
   /** shows after login / start; if another window (help, a form) is open or she is typing, it waits and tries again */
   function showNotice(tries) {
